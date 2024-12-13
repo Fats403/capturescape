@@ -1,7 +1,6 @@
 "use client";
 
-import { useState } from "react";
-import { useAuth } from "@/hooks/useAuth";
+import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -21,6 +20,10 @@ import {
 import { GoogleButton } from "@/components/auth/google-button";
 import { useToast } from "@/hooks/use-toast";
 import Image from "next/image";
+import { signInWithEmailAndPassword, signInWithPopup } from "firebase/auth";
+import { GoogleAuthProvider } from "firebase/auth";
+import { api } from "@/trpc/react";
+import { auth, type AuthCredential } from "@/lib/firebase";
 
 const loginSchema = z.object({
   email: z.string().email({
@@ -34,7 +37,6 @@ type LoginValues = z.infer<typeof loginSchema>;
 export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
-  const { signInWithEmail, signInWithGoogle } = useAuth();
   const router = useRouter();
 
   const form = useForm<LoginValues>({
@@ -45,10 +47,33 @@ export default function LoginPage() {
     },
   });
 
+  const utils = api.useUtils();
+
+  const createProfile = api.user.createProfile.useMutation({
+    onSuccess: () => {
+      void utils.user.getCurrentUser.invalidate();
+    },
+  });
+
+  const signInWithGoogle = useCallback(async () => {
+    const provider = new GoogleAuthProvider();
+    const result = (await signInWithPopup(auth, provider)) as AuthCredential;
+
+    if (result._tokenResponse?.isNewUser) {
+      await createProfile.mutateAsync({
+        email: result.user.email!,
+        displayName: result.user.displayName,
+        photoURL: result.user.photoURL,
+      });
+    }
+
+    return result.user;
+  }, [createProfile]);
+
   async function onSubmit(data: LoginValues) {
     setLoading(true);
     try {
-      await signInWithEmail(data.email, data.password);
+      await signInWithEmailAndPassword(auth, data.email, data.password);
       toast({
         title: "Welcome back!",
         description: "Successfully signed in.",

@@ -1,8 +1,14 @@
 import { initializeApp, getApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
+import { getAuth, type UserCredential } from "firebase/auth";
 import { getStorage } from "firebase/storage";
 import { env } from "@/env";
 import type { FirebaseOptions } from "firebase/app";
+
+export interface AuthCredential extends UserCredential {
+  _tokenResponse?: {
+    isNewUser?: boolean;
+  };
+}
 
 const firebaseConfig = {
   apiKey: env.NEXT_PUBLIC_FIREBASE_API_KEY,
