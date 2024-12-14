@@ -1,39 +1,63 @@
 import Image from "next/image";
+import { formatDistance } from "date-fns";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ImagePlus, Users } from "lucide-react";
+import { ImagePlus, Users, Share2 } from "lucide-react";
+import { type Event } from "@/lib/types/event";
+import Link from "next/link";
 
-export function EventCard() {
+interface EventCardProps {
+  event: Event;
+  onShare?: () => void;
+}
+
+export function EventCard({ event, onShare }: EventCardProps) {
   return (
-    <Card className="relative overflow-hidden">
-      <CardContent className="p-0">
-        <div className="absolute inset-0 z-10 bg-black/20" />
-        <div className="relative aspect-[2/1] w-full">
+    <Card className="group relative aspect-square overflow-hidden">
+      <CardContent className="h-full p-0">
+        <div className="absolute inset-0">
           <Image
-            src="https://placehold.co/400x400/png"
-            alt="Event cover"
+            src={event.coverImage}
+            alt={event.name}
             fill
             className="object-cover"
             sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
             priority
           />
         </div>
-        <div className="relative z-20 space-y-4 p-4">
-          <div>
-            <h3 className="text-lg font-semibold text-white">Wedding Photos</h3>
-            <p className="text-sm text-foreground/70">
-              Dec 24, 2024 • 128 photos
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <Button size="sm" className="flex-1">
-              <ImagePlus className="mr-2 h-4 w-4" />
-              View Photos
-            </Button>
-            <Button size="sm" variant="outline" className="flex-1">
-              <Users className="mr-2 h-4 w-4" />
-              Participants
-            </Button>
+        <div className="absolute inset-0 z-20 flex flex-col justify-end space-y-4">
+          <div className="space-y-4 rounded-md bg-black/70 p-4">
+            <div>
+              <h3 className="text-lg font-semibold text-white">{event.name}</h3>
+              <p className="text-sm text-white/60">
+                {formatDistance(new Date(event.date), Date.now(), {
+                  addSuffix: true,
+                })}
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" className="flex-1" asChild>
+                <Link href={`/dashboard`}>
+                  <ImagePlus className="mr-2 h-4 w-4" />
+                  View Gallery
+                </Link>
+              </Button>
+              <Button size="sm" variant="secondary" className="flex-1" asChild>
+                <Link href={`/dashboard`}>
+                  <Users className="mr-2 h-4 w-4" />
+                  {event.participantCount} Guest
+                  {event.participantCount !== 1 && "s"}
+                </Link>
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="px-3"
+                onClick={onShare}
+              >
+                <Share2 className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         </div>
       </CardContent>

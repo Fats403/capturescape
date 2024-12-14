@@ -20,10 +20,14 @@ import {
 import { GoogleButton } from "@/components/auth/google-button";
 import { useToast } from "@/hooks/use-toast";
 import Image from "next/image";
-import { signInWithEmailAndPassword, signInWithPopup } from "firebase/auth";
+import {
+  signInWithEmailAndPassword,
+  signInWithPopup,
+  type UserCredential,
+} from "firebase/auth";
 import { GoogleAuthProvider } from "firebase/auth";
 import { api } from "@/trpc/react";
-import { auth, type AuthCredential } from "@/lib/firebase";
+import { auth } from "@/lib/firebase";
 
 const loginSchema = z.object({
   email: z.string().email({
@@ -48,37 +52,54 @@ export default function LoginPage() {
   });
 
   const utils = api.useUtils();
-
-  const createProfile = api.user.createProfile.useMutation({
+  const loginMutation = api.auth.login.useMutation({
     onSuccess: () => {
-      void utils.user.getCurrentUser.invalidate();
+      form.reset();
+      void utils.invalidate();
+
+      router.push("/dashboard");
+    },
+    onError: (error) => {
+      toast({
+        title: "Login Failed",
+        description: error.message,
+        variant: "destructive",
+      });
     },
   });
 
+  const handleSignInSuccess = useCallback(
+    async (userCredential: UserCredential) => {
+      const idToken = await userCredential.user.getIdToken();
+
+      await loginMutation.mutateAsync({
+        idToken,
+        user: {
+          uid: userCredential.user.uid,
+          email: userCredential.user.email,
+          displayName: userCredential.user.displayName,
+          photoURL: userCredential.user.photoURL,
+        },
+      });
+    },
+    [loginMutation],
+  );
+
   const signInWithGoogle = useCallback(async () => {
     const provider = new GoogleAuthProvider();
-    const result = (await signInWithPopup(auth, provider)) as AuthCredential;
-
-    if (result._tokenResponse?.isNewUser) {
-      await createProfile.mutateAsync({
-        email: result.user.email!,
-        displayName: result.user.displayName,
-        photoURL: result.user.photoURL,
-      });
-    }
-
-    return result.user;
-  }, [createProfile]);
+    const result = await signInWithPopup(auth, provider);
+    await handleSignInSuccess(result);
+  }, [handleSignInSuccess]);
 
   async function onSubmit(data: LoginValues) {
     setLoading(true);
     try {
-      await signInWithEmailAndPassword(auth, data.email, data.password);
-      toast({
-        title: "Welcome back!",
-        description: "Successfully signed in.",
-      });
-      router.push("/dashboard");
+      const result = await signInWithEmailAndPassword(
+        auth,
+        data.email,
+        data.password,
+      );
+      await handleSignInSuccess(result);
     } catch (error) {
       toast({
         title: "Error",

@@ -3,35 +3,50 @@ import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
 import { ZodError } from "zod";
 import { adminAuth } from "@/lib/firebaseAdmin";
-import { type DecodedIdToken } from "firebase-admin/auth";
+import { type UserRecord } from "firebase-admin/auth";
 
 interface AuthedContext {
-  user: DecodedIdToken | null;
+  user: UserRecord | null;
   headers: Headers;
+}
+
+export function getTokenFromCookie(headers: Headers): string | undefined {
+  const cookieHeader = headers.get("cookie");
+  if (!cookieHeader) return undefined;
+
+  const tokenPrefix = "token=";
+  const tokenStart = cookieHeader.indexOf(tokenPrefix);
+
+  if (tokenStart === -1) return undefined;
+
+  const valueStart = tokenStart + tokenPrefix.length;
+  const valueEnd = cookieHeader.indexOf(";", valueStart);
+
+  return valueEnd === -1
+    ? cookieHeader.slice(valueStart)
+    : cookieHeader.slice(valueStart, valueEnd);
 }
 
 export const createTRPCContext = async (opts: {
   headers: Headers;
 }): Promise<AuthedContext> => {
-  const authHeader = opts.headers.get("authorization");
+  const token = getTokenFromCookie(opts.headers);
+  let user: UserRecord | null = null;
 
-  if (!authHeader) {
-    return { user: null, headers: opts.headers };
+  if (token) {
+    try {
+      const decodedClaims = await adminAuth.verifySessionCookie(token, true);
+      user = await adminAuth.getUser(decodedClaims.uid);
+    } catch (e) {
+      // Token verification failed, user remains null
+      console.error("Error verifying session cookie:", e);
+    }
   }
 
-  try {
-    // Verify the Firebase ID token
-    const token = authHeader.replace("Bearer ", "");
-    const decodedToken = await adminAuth.verifyIdToken(token);
-
-    return {
-      user: decodedToken,
-      ...opts,
-    };
-  } catch (error) {
-    console.error("Error verifying auth token:", error);
-    return { user: null, ...opts };
-  }
+  return {
+    user,
+    ...opts,
+  };
 };
 
 const t = initTRPC.context<typeof createTRPCContext>().create({

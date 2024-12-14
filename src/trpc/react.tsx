@@ -1,12 +1,11 @@
 "use client";
 
 import { QueryClientProvider, type QueryClient } from "@tanstack/react-query";
-import { loggerLink, unstable_httpBatchStreamLink } from "@trpc/client";
+import { loggerLink, httpBatchLink } from "@trpc/client";
 import { createTRPCReact } from "@trpc/react-query";
 import { type inferRouterInputs, type inferRouterOutputs } from "@trpc/server";
 import { useState } from "react";
 import SuperJSON from "superjson";
-import { auth } from "@/lib/firebase";
 
 import { type AppRouter } from "@/server/api/root";
 import { createQueryClient } from "./query-client";
@@ -35,28 +34,18 @@ export function TRPCReactProvider(props: { children: React.ReactNode }) {
             process.env.NODE_ENV === "development" ||
             (op.direction === "down" && op.result instanceof Error),
         }),
-        unstable_httpBatchStreamLink({
+        httpBatchLink({
           transformer: SuperJSON,
           url: getBaseUrl() + "/api/trpc",
           headers: async () => {
             const headers = new Headers();
             headers.set("x-trpc-source", "nextjs-react");
-            
-            // Get Firebase auth token
-            try {
-              const token = await auth.currentUser?.getIdToken();
-              if (token) {
-                headers.set("authorization", `Bearer ${token}`);
-              }
-            } catch (error) {
-              console.error("Error getting auth token:", error);
-            }
 
             return headers;
           },
         }),
       ],
-    })
+    }),
   );
 
   return (

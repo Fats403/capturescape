@@ -30,11 +30,16 @@ import { Checkbox } from "../ui/checkbox";
 import { blockContentCategories } from "@/lib/constants";
 import { Label } from "@/components/ui/label";
 import { DelayedMount } from "@/components/ui/delayed-mount";
-import { eventSchema, type EventFormValues } from "@/lib/validations/event";
 import { nanoid } from "nanoid";
 import { Card, CardContent } from "../ui/card";
 import { CoverImageUpload } from "./cover-image-upload";
 import { IMAGE_CONFIG } from "@/lib/image-utils";
+import { useToast } from "@/hooks/use-toast";
+import { api } from "@/trpc/react";
+import {
+  type EventCreationFormValues,
+  eventCreationSchema,
+} from "@/lib/validations/event";
 
 interface CreateEventDialogProps {
   open: boolean;
@@ -50,11 +55,14 @@ export function CreateEventDialog({
   const [step, setStep] = useState(1);
   const [direction, setDirection] = useState(0);
 
-  const form = useForm<EventFormValues>({
-    resolver: zodResolver(eventSchema),
+  const { toast } = useToast();
+  const utils = api.useUtils();
+
+  const form = useForm<EventCreationFormValues>({
+    resolver: zodResolver(eventCreationSchema),
     mode: "onChange",
     defaultValues: {
-      id: nanoid(), // this might be getting reset..
+      id: nanoid(),
       moderationSettings: {
         enabled: true,
         confidence: 70,
@@ -66,12 +74,27 @@ export function CreateEventDialog({
     },
   });
 
-  const onSubmit = async (data: EventFormValues) => {
-    try {
-      // Submit event data
+  const createEvent = api.event.create.useMutation({
+    onSuccess: () => {
+      toast({
+        title: "Event created!",
+        description: "Your event has been created successfully.",
+      });
+      void utils.event.getAll.invalidate();
       onOpenChange(false);
+    },
+  });
+
+  const onSubmit = async (data: EventCreationFormValues) => {
+    try {
+      await createEvent.mutateAsync(data);
     } catch (error) {
-      // Handle error
+      console.error(error);
+      toast({
+        title: "Error",
+        description: "Failed to create event. Please try again.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -111,7 +134,7 @@ export function CreateEventDialog({
 
   const isStepValid = (
     step: number,
-    formState: UseFormReturn<EventFormValues>["formState"],
+    formState: UseFormReturn<EventCreationFormValues>["formState"],
   ) => {
     const { errors } = formState;
 
@@ -223,7 +246,11 @@ export function CreateEventDialog({
   );
 }
 
-function CreateEventStep1({ form }: { form: UseFormReturn<EventFormValues> }) {
+function CreateEventStep1({
+  form,
+}: {
+  form: UseFormReturn<EventCreationFormValues>;
+}) {
   return (
     <div className="space-y-4">
       <div className="text-center">
@@ -240,7 +267,7 @@ function CreateEventStep1({ form }: { form: UseFormReturn<EventFormValues> }) {
           <FormItem>
             <FormLabel>Event Name</FormLabel>
             <FormControl>
-              <Input placeholder="Summer Wedding 2024" {...field} />
+              <Input placeholder="" {...field} />
             </FormControl>
             <FormDescription>
               This will be displayed to your guests
@@ -271,11 +298,12 @@ function CreateEventStep1({ form }: { form: UseFormReturn<EventFormValues> }) {
   );
 }
 
-function CreateEventStep2({ form }: { form: UseFormReturn<EventFormValues> }) {
-  const [error, setError] = useState<string | null>(null);
-
+function CreateEventStep2({
+  form,
+}: {
+  form: UseFormReturn<EventCreationFormValues>;
+}) {
   const handleCoverUpload = (imageUrl: string) => {
-    setError(null);
     form.setValue("coverImage", imageUrl, {
       shouldValidate: true,
       shouldDirty: true,
@@ -283,7 +311,6 @@ function CreateEventStep2({ form }: { form: UseFormReturn<EventFormValues> }) {
   };
 
   const handleUploadError = (error: string) => {
-    setError(error);
     form.setError("coverImage", {
       type: "manual",
       message: error,
@@ -320,7 +347,7 @@ function CreateEventStep2({ form }: { form: UseFormReturn<EventFormValues> }) {
               )}
             />
 
-            <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+            <div className="space-y-1 pt-4 text-xs text-muted-foreground">
               <p>Accepted file types: JPEG, PNG, WebP</p>
               <p>Maximum file size: {IMAGE_CONFIG.maxSizeMB}MB</p>
               <p>
@@ -331,13 +358,15 @@ function CreateEventStep2({ form }: { form: UseFormReturn<EventFormValues> }) {
           </div>
         </CardContent>
       </Card>
-
-      {error && <div className="text-sm text-destructive">{error}</div>}
     </div>
   );
 }
 
-function CreateEventStep3({ form }: { form: UseFormReturn<EventFormValues> }) {
+function CreateEventStep3({
+  form,
+}: {
+  form: UseFormReturn<EventCreationFormValues>;
+}) {
   return (
     <div className="space-y-6">
       <div className="text-center">
@@ -374,7 +403,11 @@ function CreateEventStep3({ form }: { form: UseFormReturn<EventFormValues> }) {
   );
 }
 
-function CreateEventStep4({ form }: { form: UseFormReturn<EventFormValues> }) {
+function CreateEventStep4({
+  form,
+}: {
+  form: UseFormReturn<EventCreationFormValues>;
+}) {
   return (
     <div className="space-y-4">
       <div className="text-center">

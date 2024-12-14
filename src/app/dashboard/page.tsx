@@ -2,35 +2,47 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { CalendarDays, PlusCircle } from "lucide-react";
+import { CalendarPlus, CalendarX, PlusCircle } from "lucide-react";
 import { EventCard } from "@/components/dashboard/event-card";
-import { AppBar } from "@/components/dashboard/app-bar";
-import { NavigationTabs } from "@/components/dashboard/navigation-tabs";
-import { ProtectedRoute } from "@/components/auth/protected-route";
-import { CreateEventDialog } from "@/components/events/create-event-dialog";
+import { CreateEventDialog } from "@/components/dashboard/create-event-dialog";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Card, CardContent } from "@/components/ui/card";
+import { useToast } from "@/hooks/use-toast";
+import { api } from "@/trpc/react";
+import { EmptyState } from "@/components/ui/empty-state";
 
 export default function DashboardPage() {
-  const [activeEvent, setActiveEvent] = useState<string | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const { toast } = useToast();
+
+  const { data: events, isLoading } = api.event.getAll.useQuery(undefined, {
+    refetchInterval: 300000,
+  });
+
+  const handleShare = async (eventId: string) => {
+    try {
+      await navigator.clipboard.writeText(
+        `${window.location.origin}/events/${eventId}/join`,
+      );
+      toast({
+        title: "Link copied!",
+        description: "Share this link with your guests",
+      });
+    } catch (error) {
+      console.error("Error sharing:", error);
+    }
+  };
 
   return (
-    <ProtectedRoute>
-      <div className="min-h-screen bg-background">
-        <div
-          className="absolute inset-0 z-0 flex"
-          style={{
-            backgroundImage: `url("data:image/svg+xml,%3Csvg width='12' height='16' viewBox='0 0 12 16' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M4 .99C4 .445 4.444 0 5 0c.552 0 1 .45 1 .99v4.02C6 5.555 5.556 6 5 6c-.552 0-1-.45-1-.99V.99zm6 8c0-.546.444-.99 1-.99.552 0 1 .45 1 .99v4.02c0 .546-.444.99-1 .99-.552 0-1-.45-1-.99V8.99z' fill='%230c2c47' fill-opacity='0.05' fill-rule='evenodd'/%3E%3C/svg%3E")`,
-          }}
-        ></div>
+    <div className="z-10 flex h-full flex-col bg-background">
+      <CreateEventDialog
+        open={showCreateDialog}
+        onOpenChange={setShowCreateDialog}
+      />
 
-        {/* Top App Bar */}
-        <AppBar />
-
-        {/* Main Content */}
-        <div className="container relative z-10 mx-auto max-w-md space-y-4 p-4">
-          {/* Create Event Button */}
+      <main className="flex-1 overflow-auto py-4">
+        <div className="container relative mx-auto max-w-md space-y-4 px-4">
           <Button
             className="w-full"
             size="lg"
@@ -40,7 +52,6 @@ export default function DashboardPage() {
             Create New Event
           </Button>
 
-          {/* Events Tabs */}
           <Tabs defaultValue="active" className="w-full">
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="active">Upcoming Events</TabsTrigger>
@@ -48,39 +59,70 @@ export default function DashboardPage() {
             </TabsList>
 
             <TabsContent value="active" className="mt-4 space-y-4">
-              {/* Active Event Card */}
-              <EventCard />
+              {isLoading ? (
+                <EventCardSkeleton />
+              ) : events?.upcoming.length === 0 ? (
+                <EmptyState
+                  title="No upcoming events"
+                  description="Start by creating an event to collect and share photos with your guests."
+                  action={() => setShowCreateDialog(true)}
+                  actionText="Create Your First Event"
+                  icon={CalendarPlus}
+                />
+              ) : (
+                events?.upcoming.map((event) => (
+                  <EventCard
+                    key={event.id}
+                    event={event}
+                    onShare={() => handleShare(event.id)}
+                  />
+                ))
+              )}
             </TabsContent>
 
-            <TabsContent value="past">
-              {/* Past Events List */}
-              <div className="space-y-4">
-                <Card>
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h3 className="font-semibold">Birthday Party</h3>
-                        <p className="text-sm text-muted-foreground">
-                          Nov 15, 2024 • 64 photos
-                        </p>
-                      </div>
-                      <Button variant="ghost" size="icon">
-                        <CalendarDays className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
+            <TabsContent value="past" className="mt-4 space-y-4">
+              {isLoading ? (
+                <EventCardSkeleton />
+              ) : events?.past.length === 0 ? (
+                <EmptyState
+                  title="No past events"
+                  description="Your completed events will appear here after their date has passed."
+                  icon={CalendarX}
+                />
+              ) : (
+                events?.past.map((event) => (
+                  <EventCard
+                    key={event.id}
+                    event={event}
+                    onShare={() => handleShare(event.id)}
+                  />
+                ))
+              )}
             </TabsContent>
           </Tabs>
         </div>
+      </main>
+    </div>
+  );
+}
 
-        <NavigationTabs />
-      </div>
-      <CreateEventDialog
-        open={showCreateDialog}
-        onOpenChange={setShowCreateDialog}
-      />
-    </ProtectedRoute>
+function EventCardSkeleton() {
+  return (
+    <Card className="overflow-hidden">
+      <CardContent className="p-0">
+        <Skeleton className="aspect-[2/1] w-full" />
+        <div className="space-y-4 p-4">
+          <div className="space-y-2">
+            <Skeleton className="h-5 w-2/3" />
+            <Skeleton className="h-4 w-1/3" />
+          </div>
+          <div className="flex gap-2">
+            <Skeleton className="h-9 flex-1" />
+            <Skeleton className="h-9 flex-1" />
+            <Skeleton className="h-9 w-10" />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

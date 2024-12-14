@@ -1,9 +1,8 @@
 import { z } from "zod";
-import { nanoid } from "nanoid";
 import { blockContentCategories } from "../constants";
 
-export const eventSchema = z.object({
-  id: z.string().default(() => nanoid()),
+export const eventCreationSchema = z.object({
+  id: z.string(),
   name: z.string().max(100).min(1, "Event name is required"),
   description: z.string().max(350).optional(),
   date: z.date({
@@ -19,4 +18,4 @@ export const eventSchema = z.object({
   }),
 });
 
-export type EventFormValues = z.infer<typeof eventSchema>;
+export type EventCreationFormValues = z.infer<typeof eventCreationSchema>;
