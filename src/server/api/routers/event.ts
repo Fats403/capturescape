@@ -55,7 +55,11 @@ export const eventRouter = createTRPCRouter({
       const { user } = ctx;
 
       try {
-        const eventsSnapshot = await db.collection("events").get();
+        const eventsSnapshot = await db
+          .collection("events")
+          .where("organizerId", "==", user.uid)
+          .orderBy("date", "desc")
+          .get();
 
         const events = eventsSnapshot.docs.map((doc) => ({
           ...doc.data(),
