@@ -14,7 +14,7 @@ const firebaseConfig = {
   apiKey: env.NEXT_PUBLIC_FIREBASE_API_KEY,
   authDomain: `${env.NEXT_PUBLIC_FIREBASE_PROJECT_ID}.firebaseapp.com`,
   projectId: env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: `${env.NEXT_PUBLIC_FIREBASE_PROJECT_ID}.appspot.com`,
+  storageBucket: `gs://${env.NEXT_PUBLIC_FIREBASE_PROJECT_ID}.firebasestorage.app`,
   messagingSenderId: env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
   appId: env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };

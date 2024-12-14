@@ -4,64 +4,64 @@
 
 @layer base {
   :root {
-    --background: 200 20% 98%;
-    --foreground: 200 50% 20%;
+    --background: 246 30% 98%;
+    --foreground: 246 50% 20%;
 
     --card: 0 0% 100%;
-    --card-foreground: 200 50% 20%;
+    --card-foreground: 246 50% 20%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 200 50% 20%;
+    --popover-foreground: 246 50% 20%;
 
-    --primary: 200 95% 50%;
-    --primary-foreground: 200 20% 98%;
+    --primary: 246 80% 56%; /* Your blue #4A37E8 */
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 200 30% 95%;
-    --secondary-foreground: 200 50% 20%;
+    --secondary: 246 30% 95%;
+    --secondary-foreground: 246 50% 20%;
 
-    --muted: 200 20% 95%;
-    --muted-foreground: 200 30% 40%;
+    --muted: 246 20% 95%;
+    --muted-foreground: 246 30% 40%;
 
-    --accent: 172 70% 45%;
-    --accent-foreground: 200 20% 98%;
+    --accent: 172 70% 45%; /* Keeping the green accent */
+    --accent-foreground: 0 0% 100%;
 
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 98%;
 
-    --border: 200 20% 90%;
-    --input: 200 20% 90%;
-    --ring: 200 95% 50%;
+    --border: 246 20% 90%;
+    --input: 246 20% 90%;
+    --ring: 246 80% 56%; /* Matching primary */
 
     --radius: 0.75rem;
   }
 
   .dark {
-    --background: 200 50% 10%;
-    --foreground: 200 20% 98%;
+    --background: 246 50% 10%;
+    --foreground: 246 20% 98%;
 
-    --card: 200 45% 12%;
-    --card-foreground: 200 20% 98%;
+    --card: 246 45% 12%;
+    --card-foreground: 246 20% 98%;
 
-    --popover: 200 45% 12%;
-    --popover-foreground: 200 20% 98%;
+    --popover: 246 45% 12%;
+    --popover-foreground: 246 20% 98%;
 
-    --primary: 200 95% 50%;
-    --primary-foreground: 200 20% 98%;
+    --primary: 246 80% 56%; /* Your blue #4A37E8 */
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 200 30% 20%;
-    --secondary-foreground: 200 20% 98%;
+    --secondary: 246 30% 20%;
+    --secondary-foreground: 246 20% 98%;
 
-    --muted: 200 40% 20%;
-    --muted-foreground: 200 30% 70%;
+    --muted: 246 40% 20%;
+    --muted-foreground: 246 30% 70%;
 
-    --accent: 172 70% 45%;
-    --accent-foreground: 200 20% 98%;
+    --accent: 172 70% 45%; /* Keeping the green accent */
+    --accent-foreground: 0 0% 100%;
 
     --destructive: 0 62% 30%;
     --destructive-foreground: 0 0% 98%;
 
-    --border: 200 30% 20%;
-    --input: 200 30% 20%;
-    --ring: 200 95% 50%;
+    --border: 246 30% 20%;
+    --input: 246 30% 20%;
+    --ring: 246 80% 56%; /* Matching primary */
   }
 }
