@@ -1,11 +1,11 @@
 import { NavigationTabs } from "@/components/ui/navigation-tabs";
 
-export default function EventLayout({
+export default async function EventLayout({
   children,
   params,
 }: {
   children: React.ReactNode;
-  params: { eventId: string };
+  params: Promise<{ eventId: string }>;
 }) {
   return (
     <div>
@@ -16,7 +16,7 @@ export default function EventLayout({
         }}
       />
       {children}
-      <NavigationTabs type="event" eventId={params.eventId} />
+      <NavigationTabs type="event" eventId={(await params).eventId} />
     </div>
   );
 }
