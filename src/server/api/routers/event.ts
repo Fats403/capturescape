@@ -53,6 +53,7 @@ export const eventRouter = createTRPCRouter({
     .input(z.void())
     .query(async ({ ctx }): Promise<{ upcoming: Event[]; past: Event[] }> => {
       const { user } = ctx;
+      const emptyResult = { upcoming: [], past: [] };
 
       try {
         const eventsSnapshot = await db
@@ -60,6 +61,10 @@ export const eventRouter = createTRPCRouter({
           .where("organizerId", "==", user.uid)
           .orderBy("date", "desc")
           .get();
+
+        if (eventsSnapshot.empty) {
+          return emptyResult;
+        }
 
         const events = eventsSnapshot.docs.map((doc) => ({
           ...doc.data(),
@@ -81,10 +86,7 @@ export const eventRouter = createTRPCRouter({
         );
       } catch (error) {
         console.error(error);
-        throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message: "Failed to fetch events",
-        });
+        return emptyResult;
       }
     }),
 
