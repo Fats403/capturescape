@@ -1,5 +1,14 @@
 import { AppBar } from "@/components/dashboard/app-bar";
 import { NavigationTabs } from "@/components/ui/navigation-tabs";
+import { type Viewport } from "next";
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  viewportFit: "cover",
+  userScalable: false,
+};
 
 export default function DashboardLayout({
   children,

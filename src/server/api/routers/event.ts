@@ -98,7 +98,11 @@ export const eventRouter = createTRPCRouter({
         );
       } catch (error) {
         console.error("Error fetching events:", error);
-        return emptyResult;
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to fetch event",
+          cause: error,
+        });
       }
     },
   ),
