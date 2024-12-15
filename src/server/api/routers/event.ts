@@ -65,28 +65,15 @@ export const eventRouter = createTRPCRouter({
           return emptyResult;
         }
 
-        const events = eventsSnapshot.docs
-          .map((doc) => {
-            const data = doc.data() as Event;
-            if (!data) return null;
-
-            return {
-              ...data,
-              id: doc.id,
-              date: data.date ?? 0,
-              name: data.name ?? "",
-              organizerId: data.organizerId ?? "",
-              coverImage: data.coverImage ?? "",
-              createdAt: data.createdAt ?? 0,
-              photoCount: data.photoCount ?? 0,
-              participantCount: data.participantCount ?? 0,
-            } as Event;
-          })
-          .filter((event): event is Event => event !== null);
+        const events = eventsSnapshot.docs.map((doc) => ({
+          ...doc.data(),
+          id: doc.id,
+        })) as Event[];
 
         const now = Date.now();
         return events.reduce<{ upcoming: Event[]; past: Event[] }>(
           (acc, event) => {
+            // Compare with end of day
             if (endOfDay(new Date(event.date)).getTime() >= now) {
               acc.upcoming.push(event);
             } else {
@@ -97,10 +84,9 @@ export const eventRouter = createTRPCRouter({
           { upcoming: [], past: [] },
         );
       } catch (error) {
-        console.error("Error fetching events:", error);
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
-          message: "Failed to fetch event",
+          message: "Failed to fetch events",
           cause: error,
         });
       }
