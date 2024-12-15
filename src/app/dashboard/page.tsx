@@ -16,9 +16,7 @@ export default function DashboardPage() {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const { toast } = useToast();
 
-  const { data: events, isLoading } = api.event.getAll.useQuery(undefined, {
-    refetchInterval: 300000,
-  });
+  const { data: events, isLoading } = api.event.getAll.useQuery();
 
   const handleShare = async (eventId: string) => {
     try {

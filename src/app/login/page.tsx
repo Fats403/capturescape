@@ -130,7 +130,7 @@ export default function LoginPage() {
   };
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-[#165985] to-[#0c2c47] text-white">
+    <main className="flex h-[100dvh] flex-col items-center justify-center bg-gradient-to-b from-[#165985] to-[#0c2c47] text-white">
       <div className="justify-centers mb-12 flex flex-col items-center gap-8">
         <Image
           src="/logo.png"

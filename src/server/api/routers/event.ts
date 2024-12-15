@@ -49,9 +49,8 @@ export const eventRouter = createTRPCRouter({
       }
     }),
 
-  getAll: protectedProcedure
-    .input(z.void())
-    .query(async ({ ctx }): Promise<{ upcoming: Event[]; past: Event[] }> => {
+  getAll: protectedProcedure.query(
+    async ({ ctx }): Promise<{ upcoming: Event[]; past: Event[] }> => {
       const { user } = ctx;
       const emptyResult = { upcoming: [], past: [] };
 
@@ -66,15 +65,28 @@ export const eventRouter = createTRPCRouter({
           return emptyResult;
         }
 
-        const events = eventsSnapshot.docs.map((doc) => ({
-          ...doc.data(),
-          id: doc.id,
-        })) as Event[];
+        const events = eventsSnapshot.docs
+          .map((doc) => {
+            const data = doc.data() as Event;
+            if (!data) return null;
+
+            return {
+              ...data,
+              id: doc.id,
+              date: data.date ?? 0,
+              name: data.name ?? "",
+              organizerId: data.organizerId ?? "",
+              coverImage: data.coverImage ?? "",
+              createdAt: data.createdAt ?? 0,
+              photoCount: data.photoCount ?? 0,
+              participantCount: data.participantCount ?? 0,
+            } as Event;
+          })
+          .filter((event): event is Event => event !== null);
 
         const now = Date.now();
         return events.reduce<{ upcoming: Event[]; past: Event[] }>(
           (acc, event) => {
-            // Compare with end of day
             if (endOfDay(new Date(event.date)).getTime() >= now) {
               acc.upcoming.push(event);
             } else {
@@ -85,10 +97,11 @@ export const eventRouter = createTRPCRouter({
           { upcoming: [], past: [] },
         );
       } catch (error) {
-        console.error(error);
+        console.error("Error fetching events:", error);
         return emptyResult;
       }
-    }),
+    },
+  ),
 
   getById: publicProcedure
     .input(
