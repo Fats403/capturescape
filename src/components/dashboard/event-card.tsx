@@ -37,13 +37,13 @@ export function EventCard({ event, onShare }: EventCardProps) {
             </div>
             <div className="flex gap-2">
               <Button size="sm" className="flex-1" asChild>
-                <Link href={`/dashboard`}>
+                <Link href={`/events/${event.id}`}>
                   <ImagePlus className="mr-2 h-4 w-4" />
                   View Gallery
                 </Link>
               </Button>
               <Button size="sm" variant="secondary" className="flex-1" asChild>
-                <Link href={`/dashboard`}>
+                <Link href={`/events/${event.id}`}>
                   <Users className="mr-2 h-4 w-4" />
                   {event.participantCount} Guest
                   {event.participantCount !== 1 && "s"}
