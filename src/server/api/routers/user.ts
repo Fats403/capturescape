@@ -2,7 +2,7 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
-import { db } from "@/lib/firebaseAdmin";
+import { db } from "@/lib/firebase-admin";
 
 export const userRouter = createTRPCRouter({
   createProfile: protectedProcedure

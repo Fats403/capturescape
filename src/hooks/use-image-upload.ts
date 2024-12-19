@@ -44,7 +44,7 @@ async function convertToWebP(file: File): Promise<Blob> {
   });
 }
 
-export function useCoverImageUpload() {
+export function useImageUpload() {
   const [progress, setProgress] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -98,6 +98,46 @@ export function useCoverImageUpload() {
     }
   };
 
+  const uploadEventPhoto = async (file: File, eventId: string) => {
+    try {
+      setIsUploading(true);
+
+      // Generate a unique filename using timestamp
+      const timestamp = Date.now();
+      const filename = `photo-${timestamp}${getFileExtension(file.name)}`;
+
+      const storageRef = ref(storage, `events/${eventId}/uploads/${filename}`);
+      const uploadTask = uploadBytesResumable(storageRef, file);
+
+      return new Promise<void>((resolve, reject) => {
+        uploadTask.on(
+          "state_changed",
+          (snapshot) => {
+            const progress =
+              (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+            setProgress(progress);
+          },
+          (error) => {
+            setIsUploading(false);
+            reject(error);
+          },
+          () => {
+            setIsUploading(false);
+            resolve();
+          },
+        );
+      });
+    } catch (error) {
+      setIsUploading(false);
+      throw error;
+    }
+  };
+
+  const getFileExtension = (filename: string): string => {
+    const ext = filename.split(".").pop();
+    return ext ? `.${ext}` : "";
+  };
+
   const handlePreview = useCallback((file: File) => {
     const reader = new FileReader();
     reader.onloadend = () => {
@@ -111,6 +151,7 @@ export function useCoverImageUpload() {
     isUploading,
     previewUrl,
     uploadCoverImage,
+    uploadEventPhoto,
     handlePreview,
     setPreviewUrl,
   };

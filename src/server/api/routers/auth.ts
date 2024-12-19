@@ -2,7 +2,7 @@ import { createTRPCRouter, publicProcedure, protectedProcedure } from "../trpc";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { cookies } from "next/headers";
-import { adminAuth, db } from "@/lib/firebaseAdmin";
+import { adminAuth, db } from "@/lib/firebase-admin";
 
 export const authRouter = createTRPCRouter({
   getUser: publicProcedure.query(async ({ ctx }) => {

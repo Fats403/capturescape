@@ -1,6 +1,6 @@
 import { createTRPCRouter, protectedProcedure, publicProcedure } from "../trpc";
 import { TRPCError } from "@trpc/server";
-import { db } from "@/lib/firebaseAdmin";
+import { db } from "@/lib/firebase-admin";
 import { type Event } from "@/lib/types/event";
 import { eventCreationSchema } from "@/lib/validations/event";
 import { z } from "zod";

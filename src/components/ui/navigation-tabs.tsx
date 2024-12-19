@@ -9,6 +9,7 @@ import {
   Image,
   Info,
   type LucideIcon,
+  Camera,
 } from "lucide-react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
@@ -43,8 +44,8 @@ const dashboardNavigationItems: NavItem[] = [
 
 const eventNavigationItems: NavItem[] = [
   {
-    icon: Info,
-    label: "Details",
+    icon: Camera,
+    label: "Camera",
     href: "/events/{id}",
     matchPattern: /^\/events\/[^/]+$/,
   },
@@ -89,7 +90,7 @@ export function NavigationTabs({
         }));
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-20 border-t border-border bg-card/90 p-2 backdrop-blur-sm">
+    <div className="fixed bottom-0 left-0 right-0 z-20 h-[80px] border-t border-border bg-card/90 p-2 backdrop-blur-sm">
       <div className="mx-auto flex max-w-md justify-around space-x-2">
         {navigationItems.map((item) => {
           const Icon = item.icon;

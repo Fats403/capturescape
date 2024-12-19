@@ -2,7 +2,7 @@
 import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
 import { ZodError } from "zod";
-import { adminAuth } from "@/lib/firebaseAdmin";
+import { adminAuth } from "@/lib/firebase-admin";
 import { type UserRecord } from "firebase-admin/auth";
 
 interface AuthedContext {

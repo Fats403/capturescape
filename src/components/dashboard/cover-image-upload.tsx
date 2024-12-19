@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import { useCoverImageUpload } from "@/hooks/use-cover-image-upload";
+import { useImageUpload } from "@/hooks/use-image-upload";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Image as ImageIcon, X } from "lucide-react";
@@ -27,7 +27,7 @@ export function CoverImageUpload({
     uploadCoverImage,
     handlePreview,
     setPreviewUrl,
-  } = useCoverImageUpload();
+  } = useImageUpload();
 
   const validateAndUpload = async (file: File) => {
     try {

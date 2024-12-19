@@ -27,28 +27,17 @@ export interface Participant {
 export interface Photo {
   id: string;
   eventId: string;
-  uploaderId: string;
-  uploaderName: string;
+  uploaderId: string | null;
   createdAt: number;
   urls: {
     original: string;
     medium: string;
     thumbnail: string;
   };
-  likes: number;
-  // Optional metadata
-  likedBy?: string[];
   status?: "pending" | "active" | "rejected";
   moderationResult?: {
-    checked: boolean;
+    flagged: boolean;
     labels?: string[];
-    confidence?: number;
+    confidences?: number[];
   };
-}
-
-export interface PhotoLike {
-  photoId: string;
-  userId: string;
-  eventId: string;
-  createdAt: number;
 }

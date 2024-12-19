@@ -8,7 +8,7 @@ export default async function EventLayout({
   params: Promise<{ eventId: string }>;
 }) {
   return (
-    <div>
+    <div className="">
       <div
         className="fixed inset-0 z-0"
         style={{
