@@ -3,13 +3,13 @@
 @tailwind utilities;
 
 :root {
-  --subtle-from: rgb(0 0 0 / 0.05); /* or any color that matches your theme */
-  --subtle-to: rgb(0 0 0 / 0.1); /* slightly darker shade */
+  --subtle-from: hsl(246 80% 85% / 0.2); /* More visible light blue */
+  --subtle-to: hsl(246 80% 85% / 0.4); /* Slightly more opaque */
 }
 
 .dark {
-  --subtle-from: rgb(255 255 255 / 0.05); /* for dark mode */
-  --subtle-to: rgb(255 255 255 / 0.1); /* slightly lighter shade */
+  --subtle-from: hsl(246 80% 25% / 0.2); /* Darker version of primary blue */
+  --subtle-to: hsl(246 80% 25% / 0.4); /* Slightly more opaque */
 }
 
 @layer base {

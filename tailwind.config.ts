@@ -7,7 +7,8 @@ export default {
   theme: {
     extend: {
       animation: {
-        "pulse-subtle": "pulse-subtle 2s cubic-bezier(0.4, 0, 0.6, 1) infinite",
+        "pulse-subtle":
+          "pulse-subtle 1.6s cubic-bezier(0.4, 0, 0.6, 1) infinite",
       },
       keyframes: {
         "pulse-subtle": {

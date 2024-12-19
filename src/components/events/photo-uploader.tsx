@@ -70,7 +70,7 @@ const PhotoUploader = ({ eventId, className = "" }: PhotoUploaderProps) => {
       }
 
       const blob = await new Promise<Blob>((resolve) =>
-        canvas.toBlob((blob) => resolve(blob!), "image/jpeg", 1.0),
+        canvas.toBlob((blob) => resolve(blob!), "image/jpeg", 0.92),
       );
 
       const file = new File([blob], "photo.jpg", { type: "image/jpeg" });
@@ -163,7 +163,7 @@ const PhotoUploader = ({ eventId, className = "" }: PhotoUploaderProps) => {
       </p>
       <label
         className={cn(
-          "animate-pulse-subtle flex aspect-square !h-[144px] !min-h-[144px] !w-[144px] !min-w-[144px] shrink-0 cursor-pointer flex-col items-center justify-center rounded-full border-2 border-dashed border-muted-foreground/25 bg-muted/50 text-muted-foreground transition-all hover:bg-muted hover:text-foreground",
+          "flex aspect-square !h-[144px] !min-h-[144px] !w-[144px] !min-w-[144px] shrink-0 animate-pulse-subtle cursor-pointer flex-col items-center justify-center rounded-full border-2 border-dashed border-muted-foreground/25 bg-muted/50 text-muted-foreground transition-all hover:bg-muted hover:text-foreground",
           className,
         )}
         style={{ aspectRatio: "1 / 1" }}
