@@ -5,6 +5,7 @@ import { type Event } from "@/lib/types/event";
 import { eventCreationSchema } from "@/lib/validations/event";
 import { z } from "zod";
 import { endOfDay, startOfDay } from "date-fns";
+import * as admin from "firebase-admin";
 
 export const eventRouter = createTRPCRouter({
   create: protectedProcedure
@@ -118,6 +119,53 @@ export const eventRouter = createTRPCRouter({
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
           message: "Failed to fetch event",
+          cause: error,
+        });
+      }
+    }),
+
+  join: protectedProcedure
+    .input(z.object({ eventId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const { user } = ctx;
+
+      try {
+        const eventRef = db.collection("events").doc(input.eventId);
+        const participantRef = eventRef
+          .collection("participants")
+          .doc(user.uid);
+
+        const eventDoc = await eventRef.get();
+        if (!eventDoc.exists) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Event not found",
+          });
+        }
+
+        const batch = db.batch();
+
+        // Add participant
+        batch.set(participantRef, {
+          userId: user.uid,
+          eventId: input.eventId,
+          joinedAt: Date.now(),
+          role: "participant",
+        });
+
+        // Increment participant count
+        batch.update(eventRef, {
+          participantCount: admin.firestore.FieldValue.increment(1),
+        });
+
+        await batch.commit();
+
+        return { success: true };
+      } catch (error) {
+        if (error instanceof TRPCError) throw error;
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to join event",
           cause: error,
         });
       }

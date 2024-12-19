@@ -6,13 +6,17 @@ import { useRealtimePhotos } from "@/hooks/use-realtime-photos";
 import { Skeleton } from "@/components/ui/skeleton";
 import { type Photo } from "@/lib/types/event";
 import { AnimatePresence, motion } from "framer-motion";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { ImageIcon } from "lucide-react";
 
 interface PhotoGridProps {
   eventId: string;
 }
 
 export function PhotoGrid({ eventId }: PhotoGridProps) {
-  const { ref, inView } = useInView();
+  const { ref, inView } = useInView({
+    threshold: 0.1,
+  });
 
   useRealtimePhotos(eventId);
 
@@ -20,7 +24,7 @@ export function PhotoGrid({ eventId }: PhotoGridProps) {
     api.photo.getEventPhotos.useInfiniteQuery(
       {
         eventId,
-        limit: 20,
+        limit: 8,
       },
       {
         getNextPageParam: (lastPage) => lastPage.nextCursor,
@@ -40,52 +44,68 @@ export function PhotoGrid({ eventId }: PhotoGridProps) {
     return <PhotoGridSkeleton />;
   }
 
+  const hasPhotos = Boolean(data?.pages?.[0]?.photos?.length);
+
   return (
-    <div className="h-[calc(100dvh-80px)] overflow-y-auto px-4 py-4">
-      <div className="grid grid-cols-2 gap-1 md:grid-cols-3 lg:grid-cols-4">
-        <AnimatePresence mode="popLayout">
-          {data?.pages.map((page) =>
-            page.photos.map((photo: Photo) => (
-              <motion.div
-                key={photo.id}
-                layout
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.9 }}
-                transition={{ duration: 0.2 }}
-                className="group relative aspect-square overflow-hidden rounded-md"
-              >
-                <Image
-                  src={photo.urls.medium}
-                  alt=""
-                  fill
-                  className="object-cover transition-transform duration-300 ease-in-out group-hover:scale-105"
-                  sizes="(max-width: 768px) 50vw, (max-width: 1024px) 33vw, 25vw"
-                  loading="lazy"
-                  placeholder="blur"
-                  blurDataURL={photo.urls.thumbnail}
-                />
-                {photo.status === "pending" && (
+    <ScrollArea className="hover:scrollbar-none h-[calc(100dvh-80px)] [&:hover_.scrollbar-thumb]:hidden [&:hover_.scrollbar-track]:hidden [&_.scrollbar-thumb]:hidden [&_.scrollbar-track]:hidden">
+      <div className="px-4 py-4">
+        {!hasPhotos ? (
+          <div className="flex h-[calc(100dvh-160px)] flex-col items-center justify-center space-y-1 text-center">
+            <ImageIcon className="mb-2 h-12 w-12 text-muted-foreground" />
+            <p className="text-xl font-medium text-muted-foreground">
+              Nothing in the gallery yet
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Be the first one to post a picture!
+            </p>
+          </div>
+        ) : (
+          <div className="grid min-h-full select-none grid-cols-2 gap-1 md:grid-cols-3">
+            <AnimatePresence mode="popLayout">
+              {data?.pages.map((page) =>
+                page.photos.map((photo: Photo) => (
                   <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    className="absolute inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+                    key={photo.id}
+                    layout
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.9 }}
+                    transition={{ duration: 0.2 }}
+                    className="group relative aspect-square overflow-hidden rounded-md"
                   >
-                    <p className="text-sm text-white">Processing...</p>
+                    <Image
+                      src={photo.urls.medium}
+                      alt=""
+                      fill
+                      className="object-cover transition-transform duration-300 ease-in-out group-hover:scale-105"
+                      sizes="(max-width: 768px) 50vw, (max-width: 1024px) 33vw"
+                      loading="lazy"
+                      placeholder="blur"
+                      blurDataURL={photo.urls.thumbnail}
+                    />
+                    {photo.status === "pending" && (
+                      <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="absolute inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+                      >
+                        <p className="text-sm text-white">Processing...</p>
+                      </motion.div>
+                    )}
                   </motion.div>
-                )}
-              </motion.div>
-            )),
-          )}
-        </AnimatePresence>
-        {hasNextPage && (
-          <div ref={ref} className="col-span-full h-8">
-            {isFetchingNextPage && <LoadingSpinner />}
+                )),
+              )}
+            </AnimatePresence>
+            {hasNextPage && (
+              <div ref={ref} className="col-span-full h-8">
+                {isFetchingNextPage && <LoadingSpinner />}
+              </div>
+            )}
           </div>
         )}
       </div>
-    </div>
+    </ScrollArea>
   );
 }
 
@@ -103,12 +123,14 @@ function LoadingSpinner() {
 
 function PhotoGridSkeleton() {
   return (
-    <div className="h-[calc(100dvh-80px)] overflow-y-auto px-4 py-4">
-      <div className="grid grid-cols-2 gap-1 md:grid-cols-3 lg:grid-cols-4">
-        {Array.from({ length: 12 }).map((_, i) => (
-          <Skeleton key={i} className="aspect-square rounded-md" />
-        ))}
+    <ScrollArea className="hover:scrollbar-none h-[calc(100dvh-80px)] [&:hover_.scrollbar-thumb]:hidden [&:hover_.scrollbar-track]:hidden [&_.scrollbar-thumb]:hidden [&_.scrollbar-track]:hidden">
+      <div className="px-4 py-4">
+        <div className="grid select-none grid-cols-2 gap-1 md:grid-cols-3 lg:grid-cols-4">
+          {Array.from({ length: 12 }).map((_, i) => (
+            <Skeleton key={i} className="aspect-square rounded-md" />
+          ))}
+        </div>
       </div>
-    </div>
+    </ScrollArea>
   );
 }

@@ -16,6 +16,18 @@ export default {
           "50%": { backgroundColor: "var(--subtle-to)" },
         },
       },
+      utilities: {
+        "scrollbar-none": {
+          /* IE and Edge */
+          "-ms-overflow-style": "none",
+          /* Firefox */
+          "scrollbar-width": "none",
+          /* Safari and Chrome */
+          "&::-webkit-scrollbar": {
+            display: "none",
+          },
+        },
+      },
       fontFamily: {
         sans: ["var(--font-geist-sans)", ...fontFamily.sans],
       },

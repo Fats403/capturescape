@@ -1,4 +1,15 @@
 import { NavigationTabs } from "@/components/ui/navigation-tabs";
+import { type Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Event",
+  description: "View and manage event details",
+  viewport:
+    "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, orientation=portrait",
+  other: {
+    "screen-orientation": "portrait",
+  },
+};
 
 export default async function EventLayout({
   children,
