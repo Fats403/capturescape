@@ -114,7 +114,7 @@ export function JoinEventDialog({
             <Button
               variant="outline"
               className="w-full"
-              onClick={() => router.push("/login")}
+              onClick={() => console.log("sign in with email")}
             >
               Sign in with Email
             </Button>

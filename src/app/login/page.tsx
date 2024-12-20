@@ -56,8 +56,6 @@ export default function LoginPage() {
     onSuccess: () => {
       form.reset();
       void utils.invalidate();
-
-      router.push("/dashboard");
     },
     onError: (error) => {
       toast({
@@ -81,9 +79,28 @@ export default function LoginPage() {
           photoURL: userCredential.user.photoURL,
         },
       });
+
+      router.push("/dashboard");
     },
-    [loginMutation],
+    [loginMutation, router],
   );
+
+  const handleGoogleSignIn = async () => {
+    setLoading(true);
+    try {
+      await signInWithGoogle();
+      router.push("/dashboard");
+    } catch (error) {
+      toast({
+        title: "Error",
+        description:
+          error instanceof Error ? error.message : "Something went wrong",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const signInWithGoogle = useCallback(async () => {
     const provider = new GoogleAuthProvider();
@@ -111,23 +128,6 @@ export default function LoginPage() {
       setLoading(false);
     }
   }
-
-  const handleGoogleSignIn = async () => {
-    setLoading(true);
-    try {
-      await signInWithGoogle();
-      router.push("/dashboard");
-    } catch (error) {
-      toast({
-        title: "Error",
-        description:
-          error instanceof Error ? error.message : "Something went wrong",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
 
   return (
     <main className="flex h-[100dvh] flex-col items-center justify-center bg-gradient-to-b from-[#165985] to-[#0c2c47] text-white">
