@@ -17,6 +17,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ valid: true }, { status: 200 });
   } catch (error) {
     console.error("Token verification failed:", error);
-    return NextResponse.json({ error: "Invalid token" }, { status: 401 });
+    return NextResponse.json({ valid: false }, { status: 401 });
   }
 }

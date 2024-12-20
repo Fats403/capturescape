@@ -8,10 +8,10 @@ export default function EventPage() {
   const eventId = params.eventId as string;
 
   return (
-    <div className="z-10 flex min-h-screen flex-col bg-background">
-      <main className="z-20 flex flex-1 items-center justify-center overflow-auto pb-[100px] pt-4">
-        <PhotoUploader eventId={eventId} className="mx-auto w-full max-w-md" />
-      </main>
+    <div className="mx-auto flex h-[calc(100dvh-80px)] w-full">
+      <div className="w-full">
+        <PhotoUploader eventId={eventId} />
+      </div>
     </div>
   );
 }

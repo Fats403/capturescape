@@ -2,7 +2,6 @@
 
 import { PhotoGrid } from "@/components/events/photo-grid";
 import { useParams } from "next/navigation";
-import { NavigationTabs } from "@/components/ui/navigation-tabs";
 
 export default function GalleryPage() {
   const params = useParams();
@@ -10,10 +9,9 @@ export default function GalleryPage() {
 
   return (
     <div className="flex flex-col bg-background">
-      <div className="container mx-auto flex-1 overflow-hidden pb-20">
+      <div className="container mx-auto flex-1 overflow-hidden">
         <PhotoGrid eventId={eventId} />
       </div>
-      <NavigationTabs type="event" eventId={eventId} />
     </div>
   );
 }

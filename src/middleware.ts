@@ -35,12 +35,19 @@ export async function middleware(request: NextRequest) {
   }
 
   // Only verify token for non-join pages
+  if (!token) {
+    return NextResponse.redirect(new URL("/login", request.url));
+  }
+
   try {
-    // Verify the token by calling an API route
+    // Use headers to pass token to API route
     const response = await fetch(new URL("/api/verify-token", request.url), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        // Add cache control headers
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        Pragma: "no-cache",
       },
       body: JSON.stringify({ token }),
     });
@@ -49,17 +56,13 @@ export async function middleware(request: NextRequest) {
       throw new Error("Invalid Token");
     }
 
-    const data = (await response.json()) as TokenResponse;
-
-    if (!data.valid) {
-      throw new Error("Invalid token");
-    }
-
     return NextResponse.next();
   } catch (error) {
-    console.error("Token verification failed:", error);
-    // Redirect to the login if token verification fails
-    return NextResponse.redirect(new URL("/login", request.url));
+    // Only redirect to login for non-join pages
+    if (!joinMatch) {
+      return NextResponse.redirect(new URL("/login", request.url));
+    }
+    return NextResponse.next();
   }
 }
 

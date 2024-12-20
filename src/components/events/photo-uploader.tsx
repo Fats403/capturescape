@@ -97,8 +97,8 @@ const PhotoUploader = ({ eventId, className = "" }: PhotoUploaderProps) => {
 
   if (capturedImage) {
     return (
-      <div className="flex flex-col items-center space-y-6 px-4">
-        <div className="relative w-full max-w-md overflow-hidden rounded-lg">
+      <div className="flex w-full flex-col items-center px-4 pt-4">
+        <div className="relative w-full max-w-xl overflow-hidden rounded-lg">
           <Image
             src={capturedImage}
             alt="Captured"
@@ -110,7 +110,7 @@ const PhotoUploader = ({ eventId, className = "" }: PhotoUploaderProps) => {
           />
         </div>
 
-        <div className="flex gap-2 overflow-x-auto">
+        <div className="mt-4 flex gap-2 overflow-x-auto">
           {(Object.keys(FILTERS) as FilterType[]).map((filter) => (
             <Button
               key={filter}
@@ -123,7 +123,7 @@ const PhotoUploader = ({ eventId, className = "" }: PhotoUploaderProps) => {
           ))}
         </div>
 
-        <div className="flex w-full max-w-md gap-2">
+        <div className="mt-4 flex w-full max-w-xl gap-2">
           <Button
             variant="outline"
             onClick={resetCapture}
@@ -156,14 +156,14 @@ const PhotoUploader = ({ eventId, className = "" }: PhotoUploaderProps) => {
   }
 
   return (
-    <div className="flex flex-col items-center justify-center space-y-6 px-4">
+    <div className="flex h-full flex-col items-center justify-center px-4">
       <h2 className="text-center text-2xl font-semibold">Take a Photo</h2>
       <p className="text-center text-muted-foreground">
         Capture a moment to share with your event guests
       </p>
       <label
         className={cn(
-          "flex aspect-square !h-[144px] !min-h-[144px] !w-[144px] !min-w-[144px] shrink-0 animate-pulse-subtle cursor-pointer flex-col items-center justify-center rounded-full border-2 border-dashed border-muted-foreground/25 bg-muted/50 text-muted-foreground transition-all hover:bg-muted hover:text-foreground",
+          "mt-8 flex aspect-square !h-[144px] !min-h-[144px] !w-[144px] !min-w-[144px] shrink-0 animate-pulse-subtle cursor-pointer flex-col items-center justify-center rounded-full border-2 border-dashed border-muted-foreground/25 bg-muted/50 text-muted-foreground transition-all hover:bg-muted hover:text-foreground",
           className,
         )}
         style={{ aspectRatio: "1 / 1" }}

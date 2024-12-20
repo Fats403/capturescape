@@ -47,10 +47,10 @@ export function PhotoGrid({ eventId }: PhotoGridProps) {
   const hasPhotos = Boolean(data?.pages?.[0]?.photos?.length);
 
   return (
-    <ScrollArea className="hover:scrollbar-none h-[calc(100dvh-80px)] [&:hover_.scrollbar-thumb]:hidden [&:hover_.scrollbar-track]:hidden [&_.scrollbar-thumb]:hidden [&_.scrollbar-track]:hidden">
-      <div className="px-4 py-4">
+    <ScrollArea className="h-[calc(100dvh-80px)]">
+      <div className="h-full px-4 py-4">
         {!hasPhotos ? (
-          <div className="flex h-[calc(100dvh-160px)] flex-col items-center justify-center space-y-1 text-center">
+          <div className="flex min-h-full flex-col items-center justify-center space-y-1 text-center">
             <ImageIcon className="mb-2 h-12 w-12 text-muted-foreground" />
             <p className="text-xl font-medium text-muted-foreground">
               Nothing in the gallery yet
@@ -123,8 +123,8 @@ function LoadingSpinner() {
 
 function PhotoGridSkeleton() {
   return (
-    <ScrollArea className="hover:scrollbar-none h-[calc(100dvh-80px)] [&:hover_.scrollbar-thumb]:hidden [&:hover_.scrollbar-track]:hidden [&_.scrollbar-thumb]:hidden [&_.scrollbar-track]:hidden">
-      <div className="px-4 py-4">
+    <ScrollArea className="h-[calc(100%-80px)] flex-1 [&_[data-radix-scroll-area-viewport]]:pb-20">
+      <div className="h-full px-4 py-4">
         <div className="grid select-none grid-cols-2 gap-1 md:grid-cols-3 lg:grid-cols-4">
           {Array.from({ length: 12 }).map((_, i) => (
             <Skeleton key={i} className="aspect-square rounded-md" />
