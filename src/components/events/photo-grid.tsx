@@ -50,9 +50,9 @@ export function PhotoGrid({ eventId }: PhotoGridProps) {
 
   return (
     <ScrollArea className="h-[calc(100dvh-80px)]">
-      <div className="h-full px-4 py-4">
+      <div className="grid h-full px-4 py-4">
         {!hasPhotos ? (
-          <div className="flex min-h-full flex-col items-center justify-center space-y-1 text-center">
+          <div className="flex h-[calc(100dvh-112px)] flex-col items-center justify-center space-y-1 text-center">
             <ImageIcon className="mb-2 h-12 w-12 text-muted-foreground" />
             <p className="text-xl font-medium text-muted-foreground">
               Nothing in the gallery yet

@@ -1,13 +1,15 @@
-import { Users } from "lucide-react";
+"use client";
+
+import { ParticipantGrid } from "@/components/events/participant-grid";
+import { useParams } from "next/navigation";
 
 export default function GuestsPage() {
+  const params = useParams();
+  const eventId = params.eventId as string;
+
   return (
-    <div className="flex h-[calc(100dvh-80px)] flex-col items-center justify-center space-y-1 text-center">
-      <Users className="mb-2 h-12 w-12 text-muted-foreground" />
-      <p className="text-xl font-medium text-muted-foreground">
-        No other guests yet
-      </p>
-      <p className="text-sm text-muted-foreground">Send out some invites!</p>
+    <div className="container mx-auto max-w-4xl px-4 py-8">
+      <ParticipantGrid eventId={eventId} />
     </div>
   );
 }

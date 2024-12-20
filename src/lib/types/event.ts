@@ -15,7 +15,15 @@ export interface Event {
   };
 }
 
-export interface Participant {
+export interface User {
+  id: string;
+  updatedAt: number;
+  displayName: string | null;
+  email: string | null;
+  photoURL: string | null;
+}
+
+export interface EventParticipant {
   userId: string;
   displayName: string | null;
   photoURL: string | null;
@@ -40,4 +48,6 @@ export interface Photo {
     labels?: string[];
     confidences?: number[];
   };
+  approvedBy?: string | null;
+  approvedAt?: number | null;
 }

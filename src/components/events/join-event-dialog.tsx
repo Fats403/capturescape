@@ -107,17 +107,10 @@ export function JoinEventDialog({
         <div className="flex flex-col items-center space-y-4 py-4">
           <h3 className="text-lg font-medium">{event?.name ?? "Loading..."}</h3>
           <p className="text-center text-sm text-muted-foreground">
-            Sign in to join this event and start sharing photos
+            Sign in with Google to join this event and start sharing photos
           </p>
-          <div className="w-full space-y-2">
+          <div className="w-full">
             <GoogleButton onClick={handleGoogleSignIn} disabled={loading} />
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={() => console.log("sign in with email")}
-            >
-              Sign in with Email
-            </Button>
           </div>
         </div>
       </DialogContent>

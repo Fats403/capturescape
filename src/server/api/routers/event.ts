@@ -1,7 +1,11 @@
 import { createTRPCRouter, protectedProcedure, publicProcedure } from "../trpc";
 import { TRPCError } from "@trpc/server";
 import { db } from "@/lib/firebase-admin";
-import { type Event } from "@/lib/types/event";
+import {
+  type User,
+  type Event,
+  type EventParticipant,
+} from "@/lib/types/event";
 import { eventCreationSchema } from "@/lib/validations/event";
 import { z } from "zod";
 import { endOfDay, startOfDay } from "date-fns";
@@ -36,6 +40,7 @@ export const eventRouter = createTRPCRouter({
           eventId: input.id,
           joinedAt: Date.now(),
           role: "organizer",
+          photoCount: 0,
         });
 
         await batch.commit();
@@ -135,12 +140,22 @@ export const eventRouter = createTRPCRouter({
           .collection("participants")
           .doc(user.uid);
 
-        const eventDoc = await eventRef.get();
+        const [eventDoc, participantDoc] = await Promise.all([
+          eventRef.get(),
+          participantRef.get(),
+        ]);
+
+        // Check if event exists
         if (!eventDoc.exists) {
           throw new TRPCError({
             code: "NOT_FOUND",
             message: "Event not found",
           });
+        }
+
+        // Check if user is already a participant
+        if (participantDoc.exists) {
+          return { success: true };
         }
 
         const batch = db.batch();
@@ -151,6 +166,7 @@ export const eventRouter = createTRPCRouter({
           eventId: input.eventId,
           joinedAt: Date.now(),
           role: "participant",
+          photoCount: 0,
         });
 
         // Increment participant count
@@ -166,6 +182,53 @@ export const eventRouter = createTRPCRouter({
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
           message: "Failed to join event",
+          cause: error,
+        });
+      }
+    }),
+
+  getParticipants: publicProcedure
+    .input(
+      z.object({
+        eventId: z.string(),
+      }),
+    )
+    .query(async ({ input }) => {
+      const { eventId } = input;
+
+      try {
+        const participantsSnapshot = await db
+          .collection("events")
+          .doc(eventId)
+          .collection("participants")
+          .get();
+
+        const participants = participantsSnapshot.docs.map((doc) => ({
+          userId: doc.id,
+          ...doc.data(),
+        })) as EventParticipant[];
+
+        // Batch fetch user data
+        const userRefs = participants.map((p) =>
+          db.collection("users").doc(p.userId),
+        );
+        const userDocs = await db.getAll(...userRefs);
+
+        // Merge participant and user data
+        return participants.map((participant, i) => {
+          const userData = userDocs?.[i]?.data() as
+            | Pick<User, "displayName" | "photoURL">
+            | undefined;
+          return {
+            ...participant,
+            displayName: userData?.displayName ?? null,
+            photoURL: userData?.photoURL ?? null,
+          };
+        }) as EventParticipant[];
+      } catch (error) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to fetch participants",
           cause: error,
         });
       }
