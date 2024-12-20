@@ -31,7 +31,7 @@ export function useRealtimePhotos(eventId: string) {
     [utils],
   );
 
-  const debouncedInvalidate = useRef(debounce(invalidate, 500)).current;
+  const debouncedInvalidate = useRef(debounce(invalidate, 1000)).current;
 
   useEffect(() => {
     const photosQuery = query(

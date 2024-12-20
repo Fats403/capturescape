@@ -4,7 +4,7 @@ import { db } from "@/lib/firebase-admin";
 import { TRPCError } from "@trpc/server";
 import { type Photo } from "@/lib/types/event";
 
-const PHOTOS_PER_PAGE = 20;
+const PHOTOS_PER_PAGE = 8;
 
 export const photoRouter = createTRPCRouter({
   getEventPhotos: protectedProcedure

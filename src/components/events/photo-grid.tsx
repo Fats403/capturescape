@@ -28,9 +28,11 @@ export function PhotoGrid({ eventId }: PhotoGridProps) {
       },
       {
         getNextPageParam: (lastPage) => lastPage.nextCursor,
-        staleTime: 2000,
+        staleTime: 30 * 1000,
         gcTime: 5 * 60 * 1000,
         refetchOnWindowFocus: false,
+        refetchOnMount: false,
+        refetchOnReconnect: false,
       },
     );
 
@@ -60,7 +62,7 @@ export function PhotoGrid({ eventId }: PhotoGridProps) {
             </p>
           </div>
         ) : (
-          <div className="grid min-h-full select-none grid-cols-2 gap-1 md:grid-cols-3">
+          <div className="grid min-h-full select-none grid-cols-2 gap-1 md:grid-cols-4">
             <AnimatePresence mode="popLayout">
               {data?.pages.map((page) =>
                 page.photos.map((photo: Photo) => (
@@ -78,21 +80,11 @@ export function PhotoGrid({ eventId }: PhotoGridProps) {
                       alt=""
                       fill
                       className="object-cover transition-transform duration-300 ease-in-out group-hover:scale-105"
-                      sizes="(max-width: 768px) 50vw, (max-width: 1024px) 33vw"
+                      sizes="(max-width: 768px) 50vw, (max-width: 1024px) 25vw"
                       loading="lazy"
                       placeholder="blur"
                       blurDataURL={photo.urls.thumbnail}
                     />
-                    {photo.status === "pending" && (
-                      <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="absolute inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm"
-                      >
-                        <p className="text-sm text-white">Processing...</p>
-                      </motion.div>
-                    )}
                   </motion.div>
                 )),
               )}
