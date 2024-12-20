@@ -98,7 +98,11 @@ export function useImageUpload() {
     }
   };
 
-  const uploadEventPhoto = async (file: File, eventId: string) => {
+  const uploadEventPhoto = async (
+    file: File,
+    eventId: string,
+    uploaderId: string | undefined,
+  ) => {
     try {
       setIsUploading(true);
 
@@ -107,7 +111,11 @@ export function useImageUpload() {
       const filename = `photo-${timestamp}${getFileExtension(file.name)}`;
 
       const storageRef = ref(storage, `events/${eventId}/uploads/${filename}`);
-      const uploadTask = uploadBytesResumable(storageRef, file);
+      const uploadTask = uploadBytesResumable(storageRef, file, {
+        customMetadata: {
+          uploaderId: uploaderId ?? "",
+        },
+      });
 
       return new Promise<void>((resolve, reject) => {
         uploadTask.on(

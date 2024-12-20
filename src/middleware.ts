@@ -23,12 +23,6 @@ export async function middleware(request: NextRequest) {
       );
     }
 
-    if (token && joinMatch) {
-      // If authenticated and on join page, redirect to main event page
-      return NextResponse.redirect(new URL(`/events/${eventId}`, request.url));
-    }
-
-    // Allow access to join page without authentication
     if (joinMatch) {
       return NextResponse.next();
     }
@@ -40,25 +34,18 @@ export async function middleware(request: NextRequest) {
   }
 
   try {
-    // Use headers to pass token to API route
-    const response = await fetch(new URL("/api/verify-token", request.url), {
+    await fetch(new URL("/api/verify-token", request.url), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        // Add cache control headers
         "Cache-Control": "no-cache, no-store, must-revalidate",
         Pragma: "no-cache",
       },
       body: JSON.stringify({ token }),
     });
 
-    if (!response.ok) {
-      throw new Error("Invalid Token");
-    }
-
     return NextResponse.next();
   } catch (error) {
-    // Only redirect to login for non-join pages
     if (!joinMatch) {
       return NextResponse.redirect(new URL("/login", request.url));
     }

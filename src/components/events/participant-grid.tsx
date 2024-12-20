@@ -37,7 +37,7 @@ export function ParticipantGrid({ eventId }: ParticipantGridProps) {
           {participants.length === 1 ? "person" : "people"} in this event
         </p>
       </div>
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
         {participants.map((participant) => (
           <ParticipantCard key={participant.userId} participant={participant} />
         ))}
@@ -69,9 +69,6 @@ function ParticipantCard({ participant }: ParticipantCardProps) {
           {participant.photoCount}{" "}
           {participant.photoCount === 1 ? "photo" : "photos"}
         </p>
-        {participant.role === "organizer" && (
-          <p className="mt-1 text-xs font-medium text-primary">Organizer</p>
-        )}
       </div>
     </div>
   );

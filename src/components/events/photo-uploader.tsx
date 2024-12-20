@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import Image from "next/image";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/providers/auth-provider";
 
 interface PhotoUploaderProps {
   eventId: string;
@@ -25,6 +26,7 @@ const FILTERS: Record<FilterType, string> = {
 const PhotoUploader = ({ eventId, className = "" }: PhotoUploaderProps) => {
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [selectedFilter, setSelectedFilter] = useState<FilterType>("none");
+  const { user } = useAuth();
   const { isUploading, progress, uploadEventPhoto } = useImageUpload();
   const { toast } = useToast();
 
@@ -70,11 +72,11 @@ const PhotoUploader = ({ eventId, className = "" }: PhotoUploaderProps) => {
       }
 
       const blob = await new Promise<Blob>((resolve) =>
-        canvas.toBlob((blob) => resolve(blob!), "image/jpeg", 0.92),
+        canvas.toBlob((blob) => resolve(blob!), "image/jpeg", 0.9),
       );
 
       const file = new File([blob], "photo.jpg", { type: "image/jpeg" });
-      await uploadEventPhoto(file, eventId);
+      await uploadEventPhoto(file, eventId, user?.uid);
 
       toast({
         position: "top",
@@ -97,20 +99,20 @@ const PhotoUploader = ({ eventId, className = "" }: PhotoUploaderProps) => {
 
   if (capturedImage) {
     return (
-      <div className="flex w-full flex-col items-center px-4 pt-4">
-        <div className="relative w-full max-w-xl overflow-hidden rounded-lg">
+      <div className="flex h-[calc(100dvh-80px)] w-full flex-col items-center px-4 pt-4">
+        <div className="relative h-[60vh] w-full max-w-xl overflow-hidden rounded-2xl bg-muted/70">
           <Image
             src={capturedImage}
             alt="Captured"
             width={800}
             height={600}
-            className="w-full"
+            className="h-full w-full rounded-2xl object-contain"
             style={{ filter: FILTERS[selectedFilter] }}
             unoptimized
           />
         </div>
 
-        <div className="mt-4 flex gap-2 overflow-x-auto">
+        <div className="mt-6 flex gap-2 overflow-x-auto">
           {(Object.keys(FILTERS) as FilterType[]).map((filter) => (
             <Button
               key={filter}
@@ -123,29 +125,29 @@ const PhotoUploader = ({ eventId, className = "" }: PhotoUploaderProps) => {
           ))}
         </div>
 
-        <div className="mt-4 flex w-full max-w-xl gap-2">
+        <div className="mt-6 flex w-full max-w-xl gap-4 px-2">
           <Button
             variant="outline"
             onClick={resetCapture}
-            className="flex-1"
+            className="h-12 flex-1 text-base font-medium"
             disabled={isUploading}
           >
-            <RefreshCcw className="mr-2 h-4 w-4" />
+            <RefreshCcw className="mr-2.5 h-5 w-5" />
             Retake
           </Button>
           <Button
             onClick={handleUpload}
-            className="flex-1"
+            className="h-12 flex-1 bg-primary text-base font-medium hover:bg-primary/90"
             disabled={isUploading}
           >
             {isUploading ? (
               <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <Loader2 className="mr-2.5 h-5 w-5 animate-spin" />
                 {Math.round(progress)}%
               </>
             ) : (
               <>
-                <Upload className="mr-2 h-4 w-4" />
+                <Upload className="mr-2.5 h-5 w-5" />
                 Upload
               </>
             )}

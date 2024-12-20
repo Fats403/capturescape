@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { api } from "@/trpc/react";
 import { GoogleButton } from "@/components/auth/google-button";
@@ -10,12 +10,15 @@ import { auth } from "@/lib/firebase";
 import { Loader2, Calendar } from "lucide-react";
 import Image from "next/image";
 import { format } from "date-fns";
+import { useAuth } from "@/providers/auth-provider";
+import { Button } from "@/components/ui/button";
 
 export default function JoinEventPage() {
   const [loading, setLoading] = useState(false);
   const params = useParams();
   const router = useRouter();
   const { toast } = useToast();
+  const { user, isLoading: isAuthLoading } = useAuth();
   const eventId = params.eventId as string;
 
   const login = api.auth.login.useMutation();
@@ -70,10 +73,28 @@ export default function JoinEventPage() {
           error instanceof Error ? error.message : "Failed to sign in",
         variant: "destructive",
       });
-    } finally {
       setLoading(false);
     }
   };
+
+  const handleJoinEvent = useCallback(async () => {
+    setLoading(true);
+    try {
+      await joinEvent.mutateAsync({ eventId });
+    } catch (error) {
+      // Error is handled by the mutation's onError callback
+      console.log(error);
+      setLoading(false);
+    }
+  }, [eventId, joinEvent]);
+
+  if (isEventLoading || isAuthLoading) {
+    return (
+      <main className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-[#165985] to-[#0c2c47]">
+        <Loader2 className="h-8 w-8 animate-spin text-white" />
+      </main>
+    );
+  }
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-[#165985] to-[#0c2c47]">
@@ -91,23 +112,35 @@ export default function JoinEventPage() {
             </div>
           )}
 
-          {isEventLoading ? (
-            <Loader2 className="h-6 w-6 animate-spin text-white/80" />
-          ) : (
-            <>
-              <div className="space-y-2 text-center">
-                <h1 className="text-3xl font-bold tracking-tight text-white">
-                  {event?.name}
-                </h1>
-                {event?.date && (
-                  <div className="flex items-center justify-center gap-2 text-white/80">
-                    <Calendar className="h-4 w-4" />
-                    <time>{format(event.date, "EEEE, MMMM d, yyyy")}</time>
-                  </div>
-                )}
+          <div className="space-y-2 text-center">
+            <h1 className="text-3xl font-bold tracking-tight text-white">
+              {event?.name}
+            </h1>
+            {event?.date && (
+              <div className="flex items-center justify-center gap-2 text-white/80">
+                <Calendar className="h-4 w-4" />
+                <time>{format(event.date, "EEEE, MMMM d, yyyy")}</time>
               </div>
-              <GoogleButton onClick={handleGoogleSignIn} disabled={loading} />
-            </>
+            )}
+          </div>
+
+          {!user ? (
+            <GoogleButton onClick={handleGoogleSignIn} disabled={loading} />
+          ) : (
+            <Button
+              onClick={handleJoinEvent}
+              disabled={loading}
+              className="w-full rounded-lg bg-primary px-4 py-2 font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {loading ? (
+                <div className="flex items-center justify-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Joining...
+                </div>
+              ) : (
+                "Join Event"
+              )}
+            </Button>
           )}
         </div>
       </div>
