@@ -90,14 +90,14 @@ export default function JoinEventPage() {
 
   if (isEventLoading || isAuthLoading) {
     return (
-      <main className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-[#165985] to-[#0c2c47]">
+      <main className="flex h-[100dvh] flex-col items-center justify-center bg-gradient-to-b from-[#165985] to-[#0c2c47]">
         <Loader2 className="h-8 w-8 animate-spin text-white" />
       </main>
     );
   }
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-[#165985] to-[#0c2c47]">
+    <main className="relative z-20 flex h-[100dvh] flex-col items-center justify-center bg-gradient-to-b from-[#165985] to-[#0c2c47]">
       <div className="w-full max-w-md space-y-8 px-4">
         <div className="flex flex-col items-center space-y-6">
           {event?.coverImage && (

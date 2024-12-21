@@ -1,57 +1,71 @@
-import { useEffect, useRef, useCallback } from "react";
-import { collection, onSnapshot, query, orderBy } from "firebase/firestore";
+import { useEffect, useRef } from "react";
+import {
+  collection,
+  onSnapshot,
+  query,
+  orderBy,
+  limit,
+} from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { api } from "@/trpc/react";
+import { type Photo } from "@/lib/types/event";
+import { type InfiniteData } from "@tanstack/react-query";
 
-function debounce<
-  T extends (...args: Parameters<T>) => ReturnType<T>,
-  P extends Parameters<T>,
->(func: T, wait: number): (...args: P) => void {
-  let timeoutId: NodeJS.Timeout | undefined;
+type PhotoQueryOutput = InfiniteData<
+  {
+    photos: Photo[];
+    nextCursor: string | undefined;
+  },
+  string | null
+>;
 
-  return (...args: P) => {
-    if (timeoutId) {
-      clearTimeout(timeoutId);
-    }
-
-    timeoutId = setTimeout(() => {
-      func(...args);
-      timeoutId = undefined;
-    }, wait);
-  };
-}
-
-export function useRealtimePhotos(eventId: string) {
+export function useRealtimePhotos(eventId: string): void {
   const utils = api.useUtils();
-
-  const invalidate = useCallback(
-    (eventId: string) => {
-      void utils.photo.getEventPhotos.invalidate({ eventId });
-    },
-    [utils],
-  );
-
-  const debouncedInvalidate = useRef(debounce(invalidate, 1000)).current;
+  const lastKnownPhotoRef = useRef<string | null>(null);
 
   useEffect(() => {
     const photosQuery = query(
       collection(db, `events/${eventId}/photos`),
       orderBy("createdAt", "desc"),
+      limit(1),
     );
 
     const unsubscribe = onSnapshot(photosQuery, (snapshot) => {
-      const hasNonLikeChanges = snapshot.docChanges().some((change) => {
-        const changedFields = Object.keys(change.doc.data());
-        return changedFields.some((field) => !field.startsWith("likes"));
-      });
+      if (snapshot.empty) return;
 
-      if (!snapshot.metadata.hasPendingWrites && hasNonLikeChanges) {
-        debouncedInvalidate(eventId);
+      const latestPhoto = snapshot?.docs[0]?.data() as Photo;
+
+      if (latestPhoto.id !== lastKnownPhotoRef.current) {
+        lastKnownPhotoRef.current = latestPhoto.id;
+
+        utils.photo.getEventPhotos.setInfiniteData(
+          { eventId, limit: 8 },
+          (oldData): PhotoQueryOutput | undefined => {
+            if (!oldData) return oldData;
+
+            const newPhoto = latestPhoto;
+            const existingPhotos = oldData.pages.flatMap((p) => p.photos);
+
+            if (existingPhotos.some((p) => p.id === newPhoto.id)) {
+              return oldData;
+            }
+
+            return {
+              ...oldData,
+              pages: [
+                {
+                  ...oldData.pages[0],
+                  photos: [newPhoto, ...(oldData?.pages[0]?.photos ?? [])],
+                  nextCursor: oldData?.pages[0]?.nextCursor ?? undefined,
+                },
+                ...oldData.pages.slice(1),
+              ],
+            };
+          },
+        );
       }
     });
 
-    return () => {
-      unsubscribe();
-    };
-  }, [eventId, debouncedInvalidate]);
+    return () => unsubscribe();
+  }, [eventId, utils]);
 }

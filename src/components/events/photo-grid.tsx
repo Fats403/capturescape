@@ -20,8 +20,6 @@ export function PhotoGrid({ eventId }: PhotoGridProps) {
     threshold: 0.1,
   });
 
-  useRealtimePhotos(eventId);
-
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } =
     api.photo.getEventPhotos.useInfiniteQuery(
       {
@@ -37,6 +35,8 @@ export function PhotoGrid({ eventId }: PhotoGridProps) {
         refetchOnReconnect: false,
       },
     );
+
+  useRealtimePhotos(eventId);
 
   useEffect(() => {
     if (inView && hasNextPage && !isFetchingNextPage) {

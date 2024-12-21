@@ -9,7 +9,7 @@ export default function EventPage() {
 
   return (
     <div className="mx-auto flex h-[calc(100dvh-80px)] w-full">
-      <div className="w-full">
+      <div className="relative z-20 w-full">
         <PhotoUploader eventId={eventId} />
       </div>
     </div>
