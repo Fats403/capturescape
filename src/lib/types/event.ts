@@ -42,6 +42,10 @@ export interface Photo {
     medium: string;
     thumbnail: string;
   };
+  likes: {
+    count: number;
+    userIds: string[];
+  };
   status?: "pending" | "active" | "rejected";
   moderationResult?: {
     flagged: boolean;

@@ -40,7 +40,12 @@ export function useRealtimePhotos(eventId: string) {
     );
 
     const unsubscribe = onSnapshot(photosQuery, (snapshot) => {
-      if (!snapshot.metadata.hasPendingWrites) {
+      const hasNonLikeChanges = snapshot.docChanges().some((change) => {
+        const changedFields = Object.keys(change.doc.data());
+        return changedFields.some((field) => !field.startsWith("likes"));
+      });
+
+      if (!snapshot.metadata.hasPendingWrites && hasNonLikeChanges) {
         debouncedInvalidate(eventId);
       }
     });
