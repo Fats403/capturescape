@@ -28,8 +28,8 @@ export function PhotoGrid({ eventId }: PhotoGridProps) {
       },
       {
         getNextPageParam: (lastPage) => lastPage.nextCursor,
-        staleTime: 30 * 1000,
-        gcTime: 5 * 60 * 1000,
+        staleTime: 1 * 60 * 1000,
+        gcTime: 30 * 60 * 1000,
         refetchOnWindowFocus: false,
         refetchOnMount: false,
         refetchOnReconnect: false,

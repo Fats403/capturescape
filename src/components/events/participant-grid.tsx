@@ -2,6 +2,7 @@ import { type EventParticipant } from "@/lib/types/event";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Users } from "lucide-react";
 import { api } from "@/trpc/react";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface ParticipantGridProps {
   eventId: string;
@@ -29,20 +30,25 @@ export function ParticipantGrid({ eventId }: ParticipantGridProps) {
   }
 
   return (
-    <>
-      <div className="mb-8">
+    <div className="flex h-[calc(100dvh-148px)] flex-col">
+      <div className="flex-none pb-8">
         <h1 className="text-2xl font-bold">Event Guests</h1>
         <p className="text-muted-foreground">
           {participants.length}{" "}
           {participants.length === 1 ? "person" : "people"} in this event
         </p>
       </div>
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
-        {participants.map((participant) => (
-          <ParticipantCard key={participant.userId} participant={participant} />
-        ))}
-      </div>
-    </>
+      <ScrollArea className="">
+        <div className="grid grid-cols-2 gap-4 px-2 md:grid-cols-3">
+          {participants.map((participant) => (
+            <ParticipantCard
+              key={participant.userId}
+              participant={participant}
+            />
+          ))}
+        </div>
+      </ScrollArea>
+    </div>
   );
 }
 
