@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   Dialog,
@@ -6,13 +6,23 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
 import { GoogleButton } from "@/components/auth/google-button";
 import { useToast } from "@/hooks/use-toast";
 import { api } from "@/trpc/react";
-import { signInWithPopup, GoogleAuthProvider } from "firebase/auth";
+import {
+  signInWithPopup,
+  GoogleAuthProvider,
+  signInWithRedirect,
+  getRedirectResult,
+} from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { useAuth } from "@/providers/auth-provider";
+
+const isMobile = () => {
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+    navigator.userAgent,
+  );
+};
 
 interface JoinEventDialogProps {
   eventId: string;
@@ -62,22 +72,28 @@ export function JoinEventDialog({
     setLoading(true);
     try {
       const provider = new GoogleAuthProvider();
-      const result = await signInWithPopup(auth, provider);
-      const idToken = await result.user.getIdToken();
 
-      // Login and wait for completion
-      await login.mutateAsync({
-        idToken,
-        user: {
-          uid: result.user.uid,
-          email: result.user.email,
-          displayName: result.user.displayName,
-          photoURL: result.user.photoURL,
-        },
-      });
+      if (isMobile()) {
+        await signInWithRedirect(auth, provider);
+        // The result will be handled in useEffect
+      } else {
+        const result = await signInWithPopup(auth, provider);
+        const idToken = await result.user.getIdToken();
 
-      // Join event after successful login
-      await joinEvent.mutateAsync({ eventId });
+        // Login and wait for completion
+        await login.mutateAsync({
+          idToken,
+          user: {
+            uid: result.user.uid,
+            email: result.user.email,
+            displayName: result.user.displayName,
+            photoURL: result.user.photoURL,
+          },
+        });
+
+        // Join event after successful login
+        await joinEvent.mutateAsync({ eventId });
+      }
     } catch (error) {
       toast({
         title: "Error",
@@ -85,11 +101,36 @@ export function JoinEventDialog({
           error instanceof Error ? error.message : "Failed to sign in",
         variant: "destructive",
       });
-    } finally {
       setLoading(false);
-      onOpenChange(false);
     }
   };
+
+  useEffect(() => {
+    const handleRedirectResult = async () => {
+      try {
+        const result = await getRedirectResult(auth);
+        if (result) {
+          const idToken = await result.user.getIdToken();
+
+          await login.mutateAsync({
+            idToken,
+            user: {
+              uid: result.user.uid,
+              email: result.user.email,
+              displayName: result.user.displayName,
+              photoURL: result.user.photoURL,
+            },
+          });
+
+          await joinEvent.mutateAsync({ eventId });
+        }
+      } catch (error) {
+        console.error("Redirect error:", error);
+      }
+    };
+
+    void handleRedirectResult();
+  }, []);
 
   const handleOpenChange = (newOpen: boolean) => {
     if (newOpen === false && !user) {

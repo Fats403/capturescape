@@ -4,39 +4,57 @@ import JoinEventPage from "./client";
 import { TRPCError } from "@trpc/server";
 
 interface PageProps {
-  params: {
+  params: Promise<{
     eventId: string;
-  };
+  }>;
 }
 
 export async function generateMetadata({
   params,
 }: PageProps): Promise<Metadata> {
   try {
-    const event = await api.event.getById({ id: params.eventId });
+    const resolvedParams = await params;
+    const event = await api.event.getById({ id: resolvedParams.eventId });
 
     if (!event) {
       return {
-        title: "Join Event",
-        description: "Join the event",
+        title: "Join Event | CaptureScape",
+        description: "Join the event on CaptureScape",
+        robots: {
+          index: false,
+          follow: false,
+        },
       };
     }
 
     return {
-      title: `Join ${event.name}`,
+      title: `Join ${event.name} | CaptureScape`,
       description: `You have been invited to join ${event.name}. Click here to accept the invitation.`,
-      openGraph: event.coverImage
-        ? {
-            images: [
+      robots: {
+        index: false,
+        follow: false,
+      },
+      openGraph: {
+        title: `Join ${event.name} | CaptureScape`,
+        description: `You have been invited to join ${event.name}`,
+        type: "website",
+        images: event.coverImage
+          ? [
               {
                 url: event.coverImage,
                 width: 1200,
                 height: 630,
                 alt: event.name,
               },
-            ],
-          }
-        : undefined,
+            ]
+          : undefined,
+      },
+      twitter: {
+        card: "summary_large_image",
+        title: `Join ${event.name} | CaptureScape`,
+        description: `You have been invited to join ${event.name}`,
+        images: event.coverImage ? [event.coverImage] : undefined,
+      },
     };
   } catch (error) {
     if (error instanceof TRPCError) {
@@ -47,7 +65,7 @@ export async function generateMetadata({
 
     return {
       title: "Join Event",
-      description: "Join the event",
+      description: "Join the event on CaptureScape!",
     };
   }
 }
