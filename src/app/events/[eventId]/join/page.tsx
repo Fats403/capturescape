@@ -1,149 +1,57 @@
-"use client";
+import { type Metadata } from "next";
+import { api } from "@/trpc/server";
+import JoinEventPage from "./client";
+import { TRPCError } from "@trpc/server";
 
-import { useState, useCallback } from "react";
-import { useParams, useRouter } from "next/navigation";
-import { api } from "@/trpc/react";
-import { GoogleButton } from "@/components/auth/google-button";
-import { useToast } from "@/hooks/use-toast";
-import { signInWithPopup, GoogleAuthProvider } from "firebase/auth";
-import { auth } from "@/lib/firebase";
-import { Loader2, Calendar } from "lucide-react";
-import Image from "next/image";
-import { format } from "date-fns";
-import { useAuth } from "@/providers/auth-provider";
-import { Button } from "@/components/ui/button";
-
-export default function JoinEventPage() {
-  const [loading, setLoading] = useState(false);
-  const params = useParams();
-  const router = useRouter();
-  const { toast } = useToast();
-  const { user, isLoading: isAuthLoading } = useAuth();
-  const eventId = params.eventId as string;
-
-  const login = api.auth.login.useMutation();
-  const { data: event, isLoading: isEventLoading } = api.event.getById.useQuery(
-    { id: eventId },
-    {
-      retry: false,
-    },
-  );
-
-  const joinEvent = api.event.join.useMutation({
-    onSuccess: () => {
-      toast({
-        position: "top",
-        variant: "success",
-        title: "Welcome!",
-        description: "You've successfully joined the event.",
-      });
-      router.push(`/events/${eventId}`);
-    },
-    onError: (error) => {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
-  });
-
-  const handleGoogleSignIn = async () => {
-    setLoading(true);
-    try {
-      const provider = new GoogleAuthProvider();
-      const result = await signInWithPopup(auth, provider);
-      const idToken = await result.user.getIdToken();
-
-      await login.mutateAsync({
-        idToken,
-        user: {
-          uid: result.user.uid,
-          email: result.user.email,
-          displayName: result.user.displayName,
-          photoURL: result.user.photoURL,
-        },
-      });
-
-      await joinEvent.mutateAsync({ eventId });
-    } catch (error) {
-      toast({
-        title: "Error",
-        description:
-          error instanceof Error ? error.message : "Failed to sign in",
-        variant: "destructive",
-      });
-      setLoading(false);
-    }
+interface PageProps {
+  params: {
+    eventId: string;
   };
+}
 
-  const handleJoinEvent = useCallback(async () => {
-    setLoading(true);
-    try {
-      await joinEvent.mutateAsync({ eventId });
-    } catch (error) {
-      // Error is handled by the mutation's onError callback
-      console.log(error);
-      setLoading(false);
+export async function generateMetadata({
+  params,
+}: PageProps): Promise<Metadata> {
+  try {
+    const event = await api.event.getById({ id: params.eventId });
+
+    if (!event) {
+      return {
+        title: "Join Event",
+        description: "Join the event",
+      };
     }
-  }, [eventId, joinEvent]);
 
-  if (isEventLoading || isAuthLoading) {
-    return (
-      <main className="flex h-[100dvh] flex-col items-center justify-center bg-gradient-to-b from-[#165985] to-[#0c2c47]">
-        <Loader2 className="h-8 w-8 animate-spin text-white" />
-      </main>
-    );
+    return {
+      title: `Join ${event.name}`,
+      description: `You have been invited to join ${event.name}. Click here to accept the invitation.`,
+      openGraph: event.coverImage
+        ? {
+            images: [
+              {
+                url: event.coverImage,
+                width: 1200,
+                height: 630,
+                alt: event.name,
+              },
+            ],
+          }
+        : undefined,
+    };
+  } catch (error) {
+    if (error instanceof TRPCError) {
+      console.error("TRPC Error:", error.message);
+    } else {
+      console.error("Failed to fetch event:", error);
+    }
+
+    return {
+      title: "Join Event",
+      description: "Join the event",
+    };
   }
+}
 
-  return (
-    <main className="relative z-20 flex h-[100dvh] flex-col items-center justify-center bg-gradient-to-b from-[#165985] to-[#0c2c47]">
-      <div className="w-full max-w-md space-y-8 px-4">
-        <div className="flex flex-col items-center space-y-6">
-          {event?.coverImage && (
-            <div className="relative aspect-[3/2] w-full overflow-hidden rounded-2xl">
-              <Image
-                src={event.coverImage}
-                alt={event.name}
-                fill
-                className="object-cover"
-                priority
-              />
-            </div>
-          )}
-
-          <div className="space-y-2 text-center">
-            <h1 className="text-3xl font-bold tracking-tight text-white">
-              {event?.name}
-            </h1>
-            {event?.date && (
-              <div className="flex items-center justify-center gap-2 text-white/80">
-                <Calendar className="h-4 w-4" />
-                <time>{format(event.date, "EEEE, MMMM d, yyyy")}</time>
-              </div>
-            )}
-          </div>
-
-          {!user ? (
-            <GoogleButton onClick={handleGoogleSignIn} disabled={loading} />
-          ) : (
-            <Button
-              onClick={handleJoinEvent}
-              disabled={loading}
-              className="w-full rounded-lg bg-primary px-4 py-2 font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
-            >
-              {loading ? (
-                <div className="flex items-center justify-center gap-2">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Joining...
-                </div>
-              ) : (
-                "Join Event"
-              )}
-            </Button>
-          )}
-        </div>
-      </div>
-    </main>
-  );
+export default function Page({ params }: PageProps) {
+  return <JoinEventPage />;
 }
