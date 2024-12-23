@@ -1,28 +1,29 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { api } from "@/trpc/react";
 import { GoogleButton } from "@/components/auth/google-button";
 import { useToast } from "@/hooks/use-toast";
-import { signInWithPopup, GoogleAuthProvider } from "firebase/auth";
-import { auth } from "@/lib/firebase";
 import { Loader2, Calendar } from "lucide-react";
 import Image from "next/image";
 import { format } from "date-fns";
 import { useAuth } from "@/providers/auth-provider";
 import { Button } from "@/components/ui/button";
+import { useGoogleAuth } from "@/hooks/use-google-auth";
 
 export default function JoinEventPage() {
-  const [loading, setLoading] = useState(false);
   const params = useParams();
   const router = useRouter();
   const { toast } = useToast();
   const { user, isLoading: isAuthLoading } = useAuth();
   const eventId = params.eventId as string;
 
-  const login = api.auth.login.useMutation();
-  const { data: event, isLoading: isEventLoading } = api.event.getById.useQuery(
+  const {
+    data: event,
+    isLoading: isEventLoading,
+    error: eventError,
+  } = api.event.getById.useQuery(
     { id: eventId },
     {
       retry: false,
@@ -48,45 +49,22 @@ export default function JoinEventPage() {
     },
   });
 
-  const handleGoogleSignIn = async () => {
-    setLoading(true);
-    try {
-      const provider = new GoogleAuthProvider();
-      const result = await signInWithPopup(auth, provider);
-      const idToken = await result.user.getIdToken();
-
-      await login.mutateAsync({
-        idToken,
-        user: {
-          uid: result.user.uid,
-          email: result.user.email,
-          displayName: result.user.displayName,
-          photoURL: result.user.photoURL,
-        },
-      });
-
+  const {
+    signIn,
+    checkRedirectResult,
+    loading: authLoading,
+  } = useGoogleAuth({
+    onSuccess: async () => {
       await joinEvent.mutateAsync({ eventId });
-    } catch (error) {
-      toast({
-        title: "Error",
-        description:
-          error instanceof Error ? error.message : "Failed to sign in",
-        variant: "destructive",
-      });
-      setLoading(false);
-    }
-  };
+    },
+  });
 
-  const handleJoinEvent = useCallback(async () => {
-    setLoading(true);
-    try {
-      await joinEvent.mutateAsync({ eventId });
-    } catch (error) {
-      // Error is handled by the mutation's onError callback
-      console.log(error);
-      setLoading(false);
-    }
-  }, [eventId, joinEvent]);
+  const isLoading =
+    isEventLoading || isAuthLoading || authLoading || joinEvent.isPending;
+
+  useEffect(() => {
+    void checkRedirectResult();
+  }, [checkRedirectResult]);
 
   if (isEventLoading || isAuthLoading) {
     return (
@@ -96,11 +74,24 @@ export default function JoinEventPage() {
     );
   }
 
+  if (eventError || !event) {
+    return (
+      <main className="flex h-[100dvh] flex-col items-center justify-center bg-gradient-to-b from-[#165985] to-[#0c2c47] text-white">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold">Event Not Found</h1>
+          <p className="mt-2 text-white/80">
+            This event may have been deleted or the link is invalid.
+          </p>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="relative z-20 flex h-[100dvh] flex-col items-center justify-center bg-gradient-to-b from-[#165985] to-[#0c2c47]">
       <div className="w-full max-w-md space-y-8 px-4">
         <div className="flex flex-col items-center space-y-6">
-          {event?.coverImage && (
+          {event.coverImage && (
             <div className="relative aspect-[3/2] w-full overflow-hidden rounded-2xl">
               <Image
                 src={event.coverImage}
@@ -114,25 +105,31 @@ export default function JoinEventPage() {
 
           <div className="space-y-2 text-center">
             <h1 className="text-3xl font-bold tracking-tight text-white">
-              {event?.name}
+              {event.name}
             </h1>
-            {event?.date && (
+            {event.date && (
               <div className="flex items-center justify-center gap-2 text-white/80">
                 <Calendar className="h-4 w-4" />
-                <time>{format(event.date, "EEEE, MMMM d, yyyy")}</time>
+                <time>
+                  {format(new Date(event.date), "EEEE, MMMM d, yyyy")}
+                </time>
               </div>
             )}
           </div>
 
           {!user ? (
-            <GoogleButton onClick={handleGoogleSignIn} disabled={loading} />
+            <GoogleButton
+              onClick={signIn}
+              disabled={isLoading}
+              loading={authLoading}
+            />
           ) : (
             <Button
-              onClick={handleJoinEvent}
-              disabled={loading}
+              onClick={() => joinEvent.mutate({ eventId })}
+              disabled={isLoading}
               className="w-full rounded-lg bg-primary px-4 py-2 font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
             >
-              {loading ? (
+              {isLoading ? (
                 <div className="flex items-center justify-center gap-2">
                   <Loader2 className="h-4 w-4 animate-spin" />
                   Joining...
