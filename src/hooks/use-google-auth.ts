@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import {
   signInWithPopup,
@@ -6,7 +6,7 @@ import {
   getRedirectResult,
   GoogleAuthProvider,
   type UserCredential,
-  AuthError,
+  type AuthError,
 } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { api } from "@/trpc/react";
@@ -27,6 +27,7 @@ export function useGoogleAuth({
   onError,
 }: UseGoogleAuthOptions = {}) {
   const [loading, setLoading] = useState(false);
+  const [checkedRedirect, setCheckedRedirect] = useState(false);
   const { toast } = useToast();
   const login = api.auth.login.useMutation();
 
@@ -34,7 +35,7 @@ export function useGoogleAuth({
     try {
       if (!result) {
         setLoading(false);
-        return; // User closed popup
+        return; // User closed popup or no redirect result
       }
 
       const idToken = await result.user.getIdToken();
@@ -63,18 +64,16 @@ export function useGoogleAuth({
   };
 
   const signIn = async () => {
-    setLoading(true); // Set loading immediately
+    setLoading(true);
     const provider = new GoogleAuthProvider();
 
     try {
       if (isMobile()) {
         await signInWithRedirect(auth, provider);
-        // Loading state will be handled by checkRedirectResult
+        // Loading state will persist through redirect
       } else {
-        // For popup, we need to handle the loading state differently
         const result = await signInWithPopup(auth, provider).catch(
           (error: AuthError) => {
-            // Handle popup closed by user
             if (error.code === "auth/popup-closed-by-user") {
               setLoading(false);
               return null;
@@ -98,30 +97,38 @@ export function useGoogleAuth({
     }
   };
 
-  const checkRedirectResult = async () => {
-    try {
-      const result = await getRedirectResult(auth);
-      if (result) {
+  // Check for redirect result on mount
+  useEffect(() => {
+    const checkRedirect = async () => {
+      if (checkedRedirect) return;
+
+      try {
         setLoading(true);
-        await handleAuthResult(result);
+        const result = await getRedirectResult(auth);
+        if (result) {
+          await handleAuthResult(result);
+        }
+      } catch (error) {
+        console.error("Redirect error:", error);
+        const errorMessage =
+          error instanceof Error ? error.message : "Failed to complete sign in";
+        toast({
+          title: "Error",
+          description: errorMessage,
+          variant: "destructive",
+        });
+        onError?.(error instanceof Error ? error : new Error(errorMessage));
+      } finally {
+        setLoading(false);
+        setCheckedRedirect(true);
       }
-    } catch (error) {
-      console.error("Redirect error:", error);
-      setLoading(false);
-      const errorMessage =
-        error instanceof Error ? error.message : "Failed to complete sign in";
-      toast({
-        title: "Error",
-        description: errorMessage,
-        variant: "destructive",
-      });
-      onError?.(error instanceof Error ? error : new Error(errorMessage));
-    }
-  };
+    };
+
+    void checkRedirect();
+  }, [checkedRedirect]); // Only run once on mount
 
   return {
     signIn,
-    checkRedirectResult,
     loading,
   };
 }

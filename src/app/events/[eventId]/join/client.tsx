@@ -49,11 +49,7 @@ export default function JoinEventPage() {
     },
   });
 
-  const {
-    signIn,
-    checkRedirectResult,
-    loading: authLoading,
-  } = useGoogleAuth({
+  const { signIn, loading: authLoading } = useGoogleAuth({
     onSuccess: async () => {
       await joinEvent.mutateAsync({ eventId });
     },
@@ -61,10 +57,6 @@ export default function JoinEventPage() {
 
   const isLoading =
     isEventLoading || isAuthLoading || authLoading || joinEvent.isPending;
-
-  useEffect(() => {
-    void checkRedirectResult();
-  }, [checkRedirectResult]);
 
   if (isEventLoading || isAuthLoading) {
     return (
