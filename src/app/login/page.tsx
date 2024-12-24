@@ -1,19 +1,17 @@
 "use client";
 
 import { useCallback } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useGoogleAuth } from "@/hooks/use-google-auth";
 import { GoogleButton } from "@/components/auth/google-button";
 
 export default function LoginPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const redirectPath = searchParams.get("redirect") ?? "/dashboard";
 
   const { signIn, loading } = useGoogleAuth({
     onSuccess: useCallback(() => {
-      router.push(redirectPath);
-    }, [router, redirectPath]),
+      router.push("/dashboard");
+    }, [router]),
   });
 
   return (
