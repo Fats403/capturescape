@@ -1,21 +1,13 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import {
   signInWithPopup,
-  signInWithRedirect,
-  getRedirectResult,
   GoogleAuthProvider,
   type UserCredential,
   type AuthError,
 } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { api } from "@/trpc/react";
-
-const isMobile = () => {
-  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
-    navigator.userAgent,
-  );
-};
 
 interface UseGoogleAuthOptions {
   onSuccess?: (result: UserCredential) => Promise<void> | void;
@@ -27,7 +19,6 @@ export function useGoogleAuth({
   onError,
 }: UseGoogleAuthOptions = {}) {
   const [loading, setLoading] = useState(false);
-  const [checkedRedirect, setCheckedRedirect] = useState(false);
   const { toast } = useToast();
   const login = api.auth.login.useMutation();
 
@@ -35,7 +26,7 @@ export function useGoogleAuth({
     try {
       if (!result) {
         setLoading(false);
-        return; // User closed popup or no redirect result
+        return; // User closed popup
       }
 
       const idToken = await result.user.getIdToken();
@@ -68,22 +59,17 @@ export function useGoogleAuth({
     const provider = new GoogleAuthProvider();
 
     try {
-      if (isMobile()) {
-        await signInWithRedirect(auth, provider);
-        // Loading state will persist through redirect
-      } else {
-        const result = await signInWithPopup(auth, provider).catch(
-          (error: AuthError) => {
-            if (error.code === "auth/popup-closed-by-user") {
-              setLoading(false);
-              return null;
-            }
-            throw error;
-          },
-        );
+      const result = await signInWithPopup(auth, provider).catch(
+        (error: AuthError) => {
+          if (error.code === "auth/popup-closed-by-user") {
+            setLoading(false);
+            return null;
+          }
+          throw error;
+        },
+      );
 
-        await handleAuthResult(result);
-      }
+      await handleAuthResult(result);
     } catch (error) {
       setLoading(false);
       const errorMessage =
@@ -96,36 +82,6 @@ export function useGoogleAuth({
       onError?.(error instanceof Error ? error : new Error(errorMessage));
     }
   };
-
-  // Check for redirect result on mount
-  useEffect(() => {
-    const checkRedirect = async () => {
-      if (checkedRedirect) return;
-
-      try {
-        setLoading(true);
-        const result = await getRedirectResult(auth);
-        if (result) {
-          await handleAuthResult(result);
-        }
-      } catch (error) {
-        console.error("Redirect error:", error);
-        const errorMessage =
-          error instanceof Error ? error.message : "Failed to complete sign in";
-        toast({
-          title: "Error",
-          description: errorMessage,
-          variant: "destructive",
-        });
-        onError?.(error instanceof Error ? error : new Error(errorMessage));
-      } finally {
-        setLoading(false);
-        setCheckedRedirect(true);
-      }
-    };
-
-    void checkRedirect();
-  }, [checkedRedirect]); // Only run once on mount
 
   return {
     signIn,

@@ -84,7 +84,7 @@ export default function JoinEventPage() {
       <div className="w-full max-w-md space-y-8 px-4">
         <div className="flex flex-col items-center space-y-6">
           {event.coverImage && (
-            <div className="relative aspect-[3/2] w-full overflow-hidden rounded-2xl">
+            <div className="relative aspect-square w-full overflow-hidden rounded-2xl">
               <Image
                 src={event.coverImage}
                 alt={event.name}
