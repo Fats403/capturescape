@@ -42,7 +42,7 @@ export function useGoogleAuth({
       });
 
       // Invalidate the auth query to refresh user data
-      utils.auth.getUser.invalidate();
+      await utils.auth.getUser.invalidate();
 
       await onSuccess?.(result);
     } catch (error) {
