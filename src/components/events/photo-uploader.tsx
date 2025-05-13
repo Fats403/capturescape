@@ -1,7 +1,14 @@
 "use client";
 
-import { useState } from "react";
-import { Camera, Upload, RefreshCcw, Loader2 } from "lucide-react";
+import { useState, useRef } from "react";
+import {
+  Camera,
+  Upload,
+  RefreshCcw,
+  Loader2,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
 import { useImageUpload } from "@/hooks/use-image-upload";
 import { Button } from "@/components/ui/button";
 import Image from "next/image";
@@ -14,13 +21,27 @@ interface PhotoUploaderProps {
   className?: string;
 }
 
-type FilterType = "none" | "grayscale" | "sepia" | "blur";
+type FilterType =
+  | "none"
+  | "grayscale"
+  | "sepia"
+  | "blur"
+  | "contrast"
+  | "brightness"
+  | "saturate"
+  | "hue-rotate"
+  | "invert";
 
 const FILTERS: Record<FilterType, string> = {
   none: "none",
   grayscale: "grayscale(1)",
   sepia: "sepia(1)",
   blur: "blur(4px)",
+  contrast: "contrast(1.5)",
+  brightness: "brightness(1.2)",
+  saturate: "saturate(2)",
+  "hue-rotate": "hue-rotate(90deg)",
+  invert: "invert(0.8)",
 };
 
 const PhotoUploader = ({ eventId, className = "" }: PhotoUploaderProps) => {
@@ -29,6 +50,7 @@ const PhotoUploader = ({ eventId, className = "" }: PhotoUploaderProps) => {
   const { user } = useAuth();
   const { isUploading, progress, uploadEventPhoto } = useImageUpload();
   const { toast } = useToast();
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   const handleCapture = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -97,42 +119,83 @@ const PhotoUploader = ({ eventId, className = "" }: PhotoUploaderProps) => {
     setSelectedFilter("none");
   };
 
+  const scrollFilters = (direction: "left" | "right") => {
+    if (!scrollContainerRef.current) return;
+
+    const container = scrollContainerRef.current;
+    const scrollAmount = 200; // Scroll by roughly 3 items
+
+    if (direction === "left") {
+      container.scrollBy({ left: -scrollAmount, behavior: "smooth" });
+    } else {
+      container.scrollBy({ left: scrollAmount, behavior: "smooth" });
+    }
+  };
+
   if (capturedImage) {
     return (
-      <div className="flex h-[calc(100dvh-80px)] w-full flex-col items-center px-4 pt-4">
-        <div className="relative h-[60vh] w-full max-w-xl overflow-hidden rounded-2xl bg-muted/70">
-          <Image
-            src={capturedImage}
-            alt="Captured"
-            width={800}
-            height={600}
-            className="h-full w-full rounded-2xl object-contain"
-            style={{ filter: FILTERS[selectedFilter] }}
-            unoptimized
-          />
+      <div className="flex h-full w-full flex-col items-center justify-between px-2 py-6 sm:py-8">
+        <div className="relative max-h-[60vh] w-full max-w-md overflow-hidden rounded-xl bg-muted/70 shadow-lg sm:max-w-lg md:max-w-xl">
+          <div className="aspect-[4/3] w-full">
+            <Image
+              src={capturedImage}
+              alt="Captured"
+              fill
+              className="object-contain"
+              style={{ filter: FILTERS[selectedFilter] }}
+              unoptimized
+            />
+          </div>
         </div>
 
-        <div className="mt-6 flex gap-2 overflow-x-auto">
-          {(Object.keys(FILTERS) as FilterType[]).map((filter) => (
+        <div className="my-6 w-full max-w-md sm:max-w-lg md:max-w-xl">
+          <div className="relative flex items-center">
             <Button
-              key={filter}
-              variant={selectedFilter === filter ? "default" : "outline"}
-              onClick={() => setSelectedFilter(filter)}
-              className="min-w-[80px]"
+              variant="ghost"
+              size="icon"
+              className="absolute -left-1 z-10 h-8 w-8 rounded-full bg-background/80 shadow-sm"
+              onClick={() => scrollFilters("left")}
             >
-              {filter.charAt(0).toUpperCase() + filter.slice(1)}
+              <ChevronLeft className="h-4 w-4" />
             </Button>
-          ))}
+
+            <div className="w-full overflow-hidden px-8">
+              <div
+                ref={scrollContainerRef}
+                className="scrollbar-hide flex gap-3 overflow-x-auto py-2 pl-3 pr-3"
+                style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+              >
+                {(Object.keys(FILTERS) as FilterType[]).map((filter) => (
+                  <FilterPreview
+                    key={filter}
+                    filter={filter}
+                    isSelected={selectedFilter === filter}
+                    onClick={() => setSelectedFilter(filter)}
+                    image={capturedImage}
+                  />
+                ))}
+              </div>
+            </div>
+
+            <Button
+              variant="ghost"
+              size="icon"
+              className="absolute -right-1 z-10 h-8 w-8 rounded-full bg-background/80 shadow-sm"
+              onClick={() => scrollFilters("right")}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
 
-        <div className="mt-6 flex w-full max-w-xl gap-4 px-2">
+        <div className="flex w-full max-w-md gap-4 px-2 sm:max-w-lg md:max-w-xl">
           <Button
             variant="outline"
             onClick={resetCapture}
             className="h-12 flex-1 text-base font-medium"
             disabled={isUploading}
           >
-            <RefreshCcw className="mr-2.5 h-5 w-5" />
+            <RefreshCcw className="mr-2 h-4 w-4 sm:mr-2.5 sm:h-5 sm:w-5" />
             Retake
           </Button>
           <Button
@@ -142,12 +205,12 @@ const PhotoUploader = ({ eventId, className = "" }: PhotoUploaderProps) => {
           >
             {isUploading ? (
               <>
-                <Loader2 className="mr-2.5 h-5 w-5 animate-spin" />
+                <Loader2 className="mr-2 h-4 w-4 animate-spin sm:mr-2.5 sm:h-5 sm:w-5" />
                 {Math.round(progress)}%
               </>
             ) : (
               <>
-                <Upload className="mr-2.5 h-5 w-5" />
+                <Upload className="mr-2 h-4 w-4 sm:mr-2.5 sm:h-5 sm:w-5" />
                 Upload
               </>
             )}
@@ -158,28 +221,83 @@ const PhotoUploader = ({ eventId, className = "" }: PhotoUploaderProps) => {
   }
 
   return (
-    <div className="flex h-full flex-col items-center justify-center px-4">
-      <h2 className="text-center text-2xl font-semibold">Take a Photo</h2>
-      <p className="text-center text-muted-foreground">
-        Capture a moment to share with your event guests
-      </p>
-      <label
+    <div className="flex h-full w-full flex-col items-center justify-center p-6">
+      <div className="max-w-md text-center">
+        <h2 className="text-2xl font-semibold sm:text-3xl">Take a Photo</h2>
+        <p className="mt-2 text-muted-foreground">
+          Capture a moment to share with your event guests
+        </p>
+      </div>
+
+      <div className="mt-10 flex flex-col items-center">
+        <label
+          className={cn(
+            "flex aspect-square w-36 cursor-pointer flex-col items-center justify-center rounded-full border-2 border-dashed border-muted-foreground/25 bg-muted/50 text-muted-foreground transition-all hover:bg-muted hover:text-foreground sm:w-44 md:w-48",
+            className,
+          )}
+        >
+          <input
+            type="file"
+            accept="image/*"
+            capture="environment"
+            onChange={handleCapture}
+            className="hidden"
+          />
+          <Camera className="mb-2 h-10 w-10 sm:h-12 sm:w-12" />
+          <span className="text-sm sm:text-base">Tap to capture</span>
+        </label>
+
+        <p className="mt-6 max-w-xs text-center text-sm text-muted-foreground">
+          Your photos will be shared with everyone attending this event
+        </p>
+      </div>
+    </div>
+  );
+};
+
+interface FilterPreviewProps {
+  filter: FilterType;
+  isSelected: boolean;
+  onClick: () => void;
+  image: string;
+}
+
+const FilterPreview = ({
+  filter,
+  isSelected,
+  onClick,
+  image,
+}: FilterPreviewProps) => {
+  return (
+    <div
+      className={cn(
+        "flex flex-col items-center space-y-1",
+        isSelected ? "scale-110 transition-transform" : "",
+      )}
+    >
+      <button
+        onClick={onClick}
         className={cn(
-          "mt-8 flex aspect-square !h-[144px] !min-h-[144px] !w-[144px] !min-w-[144px] shrink-0 animate-pulse-subtle cursor-pointer flex-col items-center justify-center rounded-full border-2 border-dashed border-muted-foreground/25 bg-muted/50 text-muted-foreground transition-all hover:bg-muted hover:text-foreground",
-          className,
+          "relative h-16 w-16 overflow-hidden rounded-md border",
+          isSelected
+            ? "border-primary ring-2 ring-primary ring-offset-2"
+            : "border-border",
         )}
-        style={{ aspectRatio: "1 / 1" }}
+        style={{ margin: isSelected ? "0px 4px" : "0px" }}
       >
-        <input
-          type="file"
-          accept="image/*"
-          capture="environment"
-          onChange={handleCapture}
-          className="hidden"
+        <div
+          className="absolute inset-0 bg-cover bg-center"
+          style={{
+            backgroundImage: `url(${image})`,
+            filter: FILTERS[filter],
+          }}
         />
-        <Camera className="mb-2 h-10 w-10" />
-        <span className="text-sm">Tap to capture</span>
-      </label>
+      </button>
+      <span className="text-xs font-medium">
+        {filter === "hue-rotate"
+          ? "Hue"
+          : filter.charAt(0).toUpperCase() + filter.slice(1)}
+      </span>
     </div>
   );
 };

@@ -21,12 +21,13 @@ export function useGoogleAuth({
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
   const login = api.auth.login.useMutation();
+  const utils = api.useUtils();
 
   const handleAuthResult = async (result: UserCredential | null) => {
     try {
       if (!result) {
         setLoading(false);
-        return; // User closed popup
+        return;
       }
 
       const idToken = await result.user.getIdToken();
@@ -39,6 +40,9 @@ export function useGoogleAuth({
           photoURL: result.user.photoURL,
         },
       });
+
+      // Invalidate the auth query to refresh user data
+      utils.auth.getUser.invalidate();
 
       await onSuccess?.(result);
     } catch (error) {
