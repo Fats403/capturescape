@@ -18,6 +18,7 @@ export default function JoinEventPage() {
   const { toast } = useToast();
   const { user, isLoading: isAuthLoading } = useAuth();
   const eventId = params.eventId as string;
+  const utils = api.useUtils();
 
   const {
     data: event,
@@ -26,7 +27,11 @@ export default function JoinEventPage() {
   } = api.event.getById.useQuery(
     { id: eventId },
     {
-      retry: false,
+      retry: 3,
+      retryDelay: 1000,
+      refetchOnWindowFocus: true,
+      refetchOnReconnect: true,
+      staleTime: 1000 * 60 * 5,
     },
   );
 
@@ -66,7 +71,7 @@ export default function JoinEventPage() {
     );
   }
 
-  if (eventError || !event) {
+  if (eventError || (!event && !isEventLoading)) {
     return (
       <main className="flex h-[100dvh] flex-col items-center justify-center bg-gradient-to-b from-[#165985] to-[#0c2c47] text-white">
         <div className="text-center">
@@ -74,7 +79,25 @@ export default function JoinEventPage() {
           <p className="mt-2 text-white/80">
             This event may have been deleted or the link is invalid.
           </p>
+          <Button
+            onClick={() => {
+              utils.event.getById.invalidate();
+              router.refresh();
+            }}
+            variant="outline"
+            className="mt-4 bg-white/10 text-white hover:bg-white/20"
+          >
+            Try Again
+          </Button>
         </div>
+      </main>
+    );
+  }
+
+  if (!event) {
+    return (
+      <main className="flex h-[100dvh] flex-col items-center justify-center bg-gradient-to-b from-[#165985] to-[#0c2c47]">
+        <Loader2 className="h-8 w-8 animate-spin text-white" />
       </main>
     );
   }

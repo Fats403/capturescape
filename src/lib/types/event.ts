@@ -13,6 +13,7 @@ export interface Event {
     confidence: number;
     categories: string[];
   };
+  emailsSentAt?: number;
 }
 
 export interface User {
@@ -26,6 +27,7 @@ export interface User {
 export interface EventParticipant {
   userId: string;
   displayName: string | null;
+  email?: string | null;
   photoURL: string | null;
   photoCount: number;
   role: "organizer" | "participant";

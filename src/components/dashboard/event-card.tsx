@@ -2,16 +2,17 @@ import Image from "next/image";
 import { formatDistance } from "date-fns";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ImagePlus, Users, Share2 } from "lucide-react";
+import { ImagePlus, Users, Share2, Mail } from "lucide-react";
 import { type Event } from "@/lib/types/event";
 import Link from "next/link";
 
 interface EventCardProps {
   event: Event;
   onShare?: () => void;
+  onSendPhotos?: (eventId: string) => void;
 }
 
-export function EventCard({ event, onShare }: EventCardProps) {
+export function EventCard({ event, onShare, onSendPhotos }: EventCardProps) {
   return (
     <Card className="group relative aspect-square overflow-hidden">
       <CardContent className="h-full p-0">
@@ -48,6 +49,17 @@ export function EventCard({ event, onShare }: EventCardProps) {
                   {event.participantCount} Guest
                   {event.participantCount !== 1 && "s"}
                 </Link>
+              </Button>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                className="flex-1"
+                onClick={() => onSendPhotos?.(event.id)}
+              >
+                <Mail className="mr-2 h-4 w-4" />
+                Send Photos
               </Button>
               <Button
                 size="sm"
