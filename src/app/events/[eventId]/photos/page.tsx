@@ -349,7 +349,7 @@ export default function EventPhotosPage() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="container relative z-20 mx-auto px-4 py-8">
       {/* Redesigned header section */}
       <div className="mb-8">
         {/* Top section with event info and back button */}
