@@ -27,7 +27,7 @@ export function LikeButton({
   const toggleLike = api.photo.toggleLike.useMutation({
     onSuccess: () => {
       // Invalidate queries to keep data fresh for future views
-      utils.photo.getPhotoById.invalidate({ photoId, eventId });
+      void utils.photo.getPhotoById.invalidate({ photoId, eventId });
       setIsSubmitting(false);
     },
     onError: () => {

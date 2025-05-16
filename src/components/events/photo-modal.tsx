@@ -18,7 +18,7 @@ export function PhotoModal({ photo, onClose }: PhotoModalProps) {
 
   // Fetch fresh photo data when modal opens
   const { data: freshPhoto } = api.photo.getPhotoById.useQuery(
-    { photoId: photo?.id || "", eventId: photo?.eventId || "" },
+    { photoId: photo?.id ?? "", eventId: photo?.eventId ?? "" },
     {
       enabled: !!photo,
       refetchOnWindowFocus: false,
@@ -26,7 +26,7 @@ export function PhotoModal({ photo, onClose }: PhotoModalProps) {
   );
 
   // Use the most up-to-date photo data
-  const currentPhoto = freshPhoto || photo;
+  const currentPhoto = freshPhoto ?? photo;
 
   // Track like state internally for smooth transitions
   const [liked, setLiked] = useState(false);
@@ -87,8 +87,8 @@ export function PhotoModal({ photo, onClose }: PhotoModalProps) {
           <div className="relative flex h-full w-full items-center justify-center">
             <div className="relative max-h-[85vh] w-auto">
               <Image
-                src={currentPhoto?.urls.medium || ""}
-                alt=""
+                src={currentPhoto?.urls.medium ?? ""}
+                alt="Event photo"
                 className="rounded-lg object-contain"
                 style={{
                   width: "auto",
@@ -103,8 +103,8 @@ export function PhotoModal({ photo, onClose }: PhotoModalProps) {
               />
               <div className="absolute bottom-4 left-4 z-50">
                 <LikeButton
-                  photoId={currentPhoto?.id || ""}
-                  eventId={currentPhoto?.eventId || ""}
+                  photoId={currentPhoto?.id ?? ""}
+                  eventId={currentPhoto?.eventId ?? ""}
                   isLiked={liked}
                   likesCount={likeCount}
                   onToggle={handleLikeToggle}

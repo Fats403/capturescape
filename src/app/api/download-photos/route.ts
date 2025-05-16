@@ -1,6 +1,7 @@
 import { db, adminStorage } from "@/lib/firebase-admin";
 import { NextRequest, NextResponse } from "next/server";
 import JSZip from "jszip";
+import { Event } from "@/lib/types/event";
 
 export async function GET(request: NextRequest) {
   const eventId = request.nextUrl.searchParams.get("eventId");
@@ -24,7 +25,10 @@ export async function GET(request: NextRequest) {
     }
 
     // Get photos based on criteria
-    let photosQuery = db.collection("events").doc(eventId).collection("photos");
+    const photosQuery = db
+      .collection("events")
+      .doc(eventId)
+      .collection("photos");
     let photos = [];
 
     if (photoIds && photoIds.length > 0) {
@@ -74,7 +78,8 @@ export async function GET(request: NextRequest) {
       compression: "DEFLATE",
     });
 
-    const eventName = eventDoc.data()?.name || "event";
+    const event = eventDoc.data() as Event;
+    const eventName = event.name ?? "event";
 
     // Return the zip file directly as a download
     return new NextResponse(zipBuffer, {

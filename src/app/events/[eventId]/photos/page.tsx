@@ -64,7 +64,7 @@ export default function EventPhotosPage() {
   // Find the selected photo from the URL parameter
   const selectedPhoto =
     photoIdFromUrl && photos
-      ? photos.find((photo) => photo.id === photoIdFromUrl) || null
+      ? (photos.find((photo) => photo.id === photoIdFromUrl) ?? null)
       : null;
 
   // Function to open a photo (updates URL)
@@ -107,7 +107,7 @@ export default function EventPhotosPage() {
   // Check if current user is the organizer
   const isOrganizer = user?.uid === event?.organizerId;
 
-  const photosArray = photos || [];
+  const photosArray = photos ?? [];
 
   // Delete photo mutation
   const deletePhotoMutation = api.photo.deletePhoto.useMutation({
@@ -120,7 +120,7 @@ export default function EventPhotosPage() {
       // Close the delete dialog and refresh photo list
       setPhotoToDelete(null);
       // Invalidate queries to refetch photos
-      utils.event.getEventPhotos.invalidate({ eventId });
+      void utils.event.getEventPhotos.invalidate({ eventId });
     },
     onError: (error) => {
       toast({
@@ -222,11 +222,11 @@ export default function EventPhotosPage() {
 
       // Get file name from Content-Disposition header if available
       const contentDisposition = response.headers.get("Content-Disposition");
-      let filename = `${event?.name || "event"}-photos.zip`;
+      let filename = `${event?.name ?? "event"}-photos.zip`;
 
       if (contentDisposition) {
         const matches = /filename="([^"]+)"/.exec(contentDisposition);
-        if (matches && matches[1]) {
+        if (matches?.[1]) {
           filename = matches[1];
         }
       }
@@ -276,11 +276,11 @@ export default function EventPhotosPage() {
 
       // Get file name from Content-Disposition header if available
       const contentDisposition = response.headers.get("Content-Disposition");
-      let filename = `${event?.name || "event"}-photos.zip`;
+      let filename = `${event?.name ?? "event"}-photos.zip`;
 
       if (contentDisposition) {
         const matches = /filename="([^"]+)"/.exec(contentDisposition);
-        if (matches && matches[1]) {
+        if (matches?.[1]) {
           filename = matches[1];
         }
       }
@@ -323,7 +323,8 @@ export default function EventPhotosPage() {
       <div className="flex h-[calc(100vh-80px)] w-full flex-col items-center justify-center p-4 text-center">
         <h1 className="text-2xl font-bold">Event not found</h1>
         <p className="mt-2 text-muted-foreground">
-          The event you're looking for doesn't exist or has been deleted.
+          The event you&apos;re looking for doesn&apos;t exist or has been
+          deleted.
         </p>
       </div>
     );
@@ -446,7 +447,7 @@ export default function EventPhotosPage() {
                 className="h-8 w-8 rounded-full bg-white/30 backdrop-blur-sm"
                 onClick={(e) => {
                   e.stopPropagation();
-                  handleDownloadSingle(photo);
+                  void handleDownloadSingle(photo);
                 }}
               >
                 <Download className="h-4 w-4" />
@@ -559,7 +560,7 @@ export default function EventPhotosPage() {
                       );
                       const prevIndex =
                         (currentIndex - 1 + photos.length) % photos.length;
-                      openPhoto(photos[prevIndex] as Photo);
+                      openPhoto(photos[prevIndex]!);
                     }}
                   >
                     Previous
@@ -575,7 +576,7 @@ export default function EventPhotosPage() {
                         (p) => p.id === selectedPhoto.id,
                       );
                       const nextIndex = (currentIndex + 1) % photos.length;
-                      openPhoto(photos[nextIndex] as Photo);
+                      openPhoto(photos[nextIndex]!);
                     }}
                   >
                     Next

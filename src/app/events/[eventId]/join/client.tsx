@@ -81,7 +81,7 @@ export default function JoinEventPage() {
           </p>
           <Button
             onClick={() => {
-              utils.event.getById.invalidate();
+              void utils.event.getById.invalidate();
               router.refresh();
             }}
             variant="outline"
