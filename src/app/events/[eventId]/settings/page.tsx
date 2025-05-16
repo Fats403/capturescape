@@ -100,7 +100,8 @@ export default function EventInfoPage() {
       <div className="flex h-[calc(100vh-80px)] w-full flex-col items-center justify-center p-4 text-center">
         <h1 className="text-2xl font-bold">Event not found</h1>
         <p className="mt-2 text-muted-foreground">
-          The event you're looking for doesn't exist or has been deleted.
+          The event you&apos;re looking for doesn&apos;t exist or has been
+          deleted.
         </p>
       </div>
     );
