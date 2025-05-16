@@ -306,14 +306,14 @@ export const eventRouter = createTRPCRouter({
         const emailPromises = participants
           .filter((p) => p.email) // Only send to participants with emails
           .map(async (participant) => {
-            const userData = usersData[participant.userId] || null;
+            const userData = usersData[participant.userId] ?? null;
             const displayName =
-              userData?.displayName ||
-              participant.email?.split("@")[0] ||
+              userData?.displayName ??
+              participant.email?.split("@")[0] ??
               "Guest";
 
             // Prepare stats for the template
-            const photoCount = participant.photoCount || 0;
+            const photoCount = participant.photoCount ?? 0;
 
             // Get total likes for this participant's photos
             const photosSnapshot = await db
@@ -325,7 +325,7 @@ export const eventRouter = createTRPCRouter({
 
             const totalLikes = photosSnapshot.docs.reduce((sum, doc) => {
               const photoData = doc.data() as Photo;
-              return sum + (photoData?.likes?.count || 0);
+              return sum + (photoData?.likes?.count ?? 0);
             }, 0);
 
             return mailjet.post("send", { version: "v3.1" }).request({
