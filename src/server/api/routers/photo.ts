@@ -99,4 +99,139 @@ export const photoRouter = createTRPCRouter({
 
       return { success: true };
     }),
+
+  getPhotoById: protectedProcedure
+    .input(
+      z.object({
+        photoId: z.string(),
+        eventId: z.string(),
+      }),
+    )
+    .query(async ({ input }) => {
+      const { photoId, eventId } = input;
+
+      try {
+        const photoDoc = await db
+          .collection("events")
+          .doc(eventId)
+          .collection("photos")
+          .doc(photoId)
+          .get();
+
+        if (!photoDoc.exists) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Photo not found",
+          });
+        }
+
+        return photoDoc.data() as Photo;
+      } catch (error) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to fetch photo",
+          cause: error,
+        });
+      }
+    }),
+
+  // Add this endpoint to your photo router
+  getPhotoLikes: protectedProcedure
+    .input(
+      z.object({
+        photoId: z.string(),
+        eventId: z.string(),
+      }),
+    )
+    .query(async ({ input, ctx }) => {
+      const { photoId, eventId } = input;
+      const userId = ctx.user.uid;
+
+      try {
+        const photoDoc = await db
+          .collection("events")
+          .doc(eventId)
+          .collection("photos")
+          .doc(photoId)
+          .get();
+
+        if (!photoDoc.exists) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Photo not found",
+          });
+        }
+
+        const photo = photoDoc.data() as Photo;
+        const likesData = photo.likes || { count: 0, userIds: [] };
+
+        return {
+          count: likesData.count,
+          userLiked: likesData.userIds.includes(userId),
+        };
+      } catch (error) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to fetch photo likes",
+          cause: error,
+        });
+      }
+    }),
+
+  deletePhoto: protectedProcedure
+    .input(
+      z.object({
+        photoId: z.string(),
+        eventId: z.string(),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      const { photoId, eventId } = input;
+      const userId = ctx.user.uid;
+
+      // Check if user is organizer
+      const eventRef = db.collection("events").doc(eventId);
+      const eventDoc = await eventRef.get();
+
+      if (!eventDoc.exists) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Event not found",
+        });
+      }
+
+      const event = eventDoc.data();
+      if (event?.organizerId !== userId) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Only event organizers can delete photos",
+        });
+      }
+
+      const photoRef = eventRef.collection("photos").doc(photoId);
+      const photoDoc = await photoRef.get();
+
+      if (!photoDoc.exists) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Photo not found",
+        });
+      }
+
+      const photo = photoDoc.data() as Photo;
+
+      // Delete the photo document and counts from the event and participant
+      if (photo.uploaderId) {
+        await eventRef
+          .collection("participants")
+          .doc(photo.uploaderId)
+          .update({
+            photoCount: FieldValue.increment(-1),
+          });
+      }
+      await eventRef.update({ photoCount: FieldValue.increment(-1) });
+      await eventRef.collection("photos").doc(photoId).delete();
+
+      return { success: true };
+    }),
 });

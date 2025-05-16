@@ -11,11 +11,14 @@ interface ClientLayoutProps {
 export function ClientLayout({ children, eventId }: ClientLayoutProps) {
   const pathname = usePathname();
   const isJoinPage = pathname?.includes("/join");
+  const isPhotosPage = pathname?.includes("/photos");
 
   return (
     <div>
       {children}
-      {!isJoinPage && <NavigationTabs type="event" eventId={eventId} />}
+      {!isJoinPage && !isPhotosPage && (
+        <NavigationTabs type="event" eventId={eventId} />
+      )}
     </div>
   );
 }

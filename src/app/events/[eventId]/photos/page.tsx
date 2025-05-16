@@ -1,34 +1,52 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useParams, useSearchParams } from "next/navigation";
+import React, { useState } from "react";
+import { useParams, useSearchParams, useRouter } from "next/navigation";
 import { api } from "@/trpc/react";
-import { Loader2, Download, Check, X } from "lucide-react";
+import {
+  Loader2,
+  Download,
+  X,
+  Heart,
+  Share2,
+  Trash2,
+  Camera,
+  CalendarIcon,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Photo } from "@/lib/types/event";
+import { useAuth } from "@/providers/auth-provider";
 import Image from "next/image";
-import JSZip from "jszip";
 import { saveAs } from "file-saver";
+import { formatRelative } from "date-fns";
 
 export default function EventPhotosPage() {
   const params = useParams();
   const searchParams = useSearchParams();
+  const router = useRouter();
   const { toast } = useToast();
+  const { user } = useAuth();
   const eventId = params.eventId as string;
-  const downloadAll = searchParams.get("download") === "all";
+
+  // Read photo ID from URL query parameter
+  const photoIdFromUrl = searchParams.get("id");
 
   const [selectedPhotos, setSelectedPhotos] = useState<Set<string>>(new Set());
-  const [selectedPhoto, setSelectedPhoto] = useState<Photo | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [photoToDelete, setPhotoToDelete] = useState<Photo | null>(null);
+  const [downloadType, setDownloadType] = useState<"all" | "selected" | null>(
+    null,
+  );
 
   // Fetch event details
   const { data: event, isLoading: isEventLoading } = api.event.getById.useQuery(
@@ -43,12 +61,77 @@ export default function EventPhotosPage() {
       { enabled: Boolean(eventId) },
     );
 
-  // Handle automatic download when URL contains ?download=all
-  useEffect(() => {
-    if (downloadAll && photos && photos.length > 0 && !isDownloading) {
-      handleDownloadAll();
-    }
-  }, [downloadAll, photos, isDownloading]);
+  // Find the selected photo from the URL parameter
+  const selectedPhoto =
+    photoIdFromUrl && photos
+      ? photos.find((photo) => photo.id === photoIdFromUrl) || null
+      : null;
+
+  // Function to open a photo (updates URL)
+  const openPhoto = (photo: Photo) => {
+    const url = new URL(window.location.href);
+    url.searchParams.set("id", photo.id);
+    router.replace(url.pathname + url.search, { scroll: false });
+  };
+
+  // Function to close the photo modal (updates URL)
+  const closePhoto = () => {
+    router.replace(`/events/${eventId}/photos`, { scroll: false });
+  };
+
+  // Share photo function
+  const sharePhoto = (photo: Photo) => {
+    const url = new URL(window.location.origin);
+    url.pathname = `/events/${eventId}/photos`;
+    url.searchParams.set("id", photo.id);
+
+    navigator.clipboard
+      .writeText(url.toString())
+      .then(() => {
+        toast({
+          title: "Link copied!",
+          description: "Share link copied to clipboard",
+          duration: 3000,
+        });
+      })
+      .catch(() => {
+        toast({
+          title: "Failed to copy",
+          description: "Could not copy link to clipboard",
+          variant: "destructive",
+          duration: 3000,
+        });
+      });
+  };
+
+  // Check if current user is the organizer
+  const isOrganizer = user?.uid === event?.organizerId;
+
+  const photosArray = photos || [];
+
+  // Delete photo mutation
+  const deletePhotoMutation = api.photo.deletePhoto.useMutation({
+    onSuccess: () => {
+      toast({
+        title: "Photo deleted",
+        description: "The photo has been permanently deleted",
+        variant: "success",
+      });
+      // Close the delete dialog and refresh photo list
+      setPhotoToDelete(null);
+      // Invalidate queries to refetch photos
+      utils.event.getEventPhotos.invalidate({ eventId });
+    },
+    onError: (error) => {
+      toast({
+        title: "Delete failed",
+        description: error.message || "Failed to delete photo",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const utils = api.useUtils();
 
   // Toggle photo selection
   const togglePhotoSelection = (photoId: string) => {
@@ -61,31 +144,44 @@ export default function EventPhotosPage() {
     setSelectedPhotos(newSelected);
   };
 
-  // Select all photos
-  const selectAllPhotos = () => {
-    if (!photos) return;
+  // Handle delete photo
+  const handleDeletePhoto = async () => {
+    if (!photoToDelete || !user?.uid) return;
 
-    if (selectedPhotos.size === photos.length) {
-      // Deselect all if all are already selected
-      setSelectedPhotos(new Set());
-    } else {
-      // Select all
-      setSelectedPhotos(new Set(photos.map((photo) => photo.id)));
-    }
+    deletePhotoMutation.mutate({
+      photoId: photoToDelete.id,
+      eventId,
+    });
   };
 
-  // Download a single photo
+  // For single photo download
   const handleDownloadSingle = async (photo: Photo) => {
     try {
-      const response = await fetch(photo.urls.original);
+      toast({
+        title: "Downloading photo...",
+        description: "Please wait while we prepare your download.",
+      });
+
+      // Fetch the photo through our API route
+      const response = await fetch(`/api/photo/${photo.id}?eventId=${eventId}`);
+
+      if (!response.ok) {
+        throw new Error(`Download failed: ${response.statusText}`);
+      }
+
+      // Get the photo as a blob
       const blob = await response.blob();
+
+      // Use saveAs to download it
       saveAs(blob, `photo-${photo.id}.jpg`);
 
       toast({
         title: "Download complete",
         description: "Your photo has been downloaded.",
+        variant: "success",
       });
     } catch (error) {
+      console.error("Download error:", error);
       toast({
         title: "Download failed",
         description: "Failed to download the photo. Please try again.",
@@ -94,7 +190,7 @@ export default function EventPhotosPage() {
     }
   };
 
-  // Download selected photos as a ZIP
+  // For selected photos download
   const handleDownloadSelected = async () => {
     if (selectedPhotos.size === 0) {
       toast({
@@ -106,32 +202,44 @@ export default function EventPhotosPage() {
     }
 
     setIsDownloading(true);
+    setDownloadType("selected");
     try {
-      const zip = new JSZip();
-      const selectedPhotosList =
-        photos?.filter((photo) => selectedPhotos.has(photo.id)) || [];
+      const photoIds = Array.from(selectedPhotos).join(",");
 
       toast({
         title: "Preparing download",
-        description: `Preparing ${selectedPhotosList.length} photos for download...`,
+        description: `Downloading ${selectedPhotos.size} photos...`,
       });
 
-      // Download each photo and add to ZIP
-      const promises = selectedPhotosList.map(async (photo, index) => {
-        const response = await fetch(photo.urls.original);
-        const blob = await response.blob();
-        zip.file(`photo-${index + 1}.jpg`, blob);
-      });
+      // Fetch the zip file
+      const response = await fetch(
+        `/api/download-photos?eventId=${eventId}&photoIds=${photoIds}`,
+      );
 
-      await Promise.all(promises);
+      if (!response.ok) {
+        throw new Error(`Download failed: ${response.statusText}`);
+      }
 
-      // Generate and save ZIP file
-      const content = await zip.generateAsync({ type: "blob" });
-      saveAs(content, `${event?.name || "event"}-photos.zip`);
+      // Get file name from Content-Disposition header if available
+      const contentDisposition = response.headers.get("Content-Disposition");
+      let filename = `${event?.name || "event"}-photos.zip`;
+
+      if (contentDisposition) {
+        const matches = /filename="([^"]+)"/.exec(contentDisposition);
+        if (matches && matches[1]) {
+          filename = matches[1];
+        }
+      }
+
+      // Get the zip as a blob
+      const blob = await response.blob();
+
+      // Use saveAs to download it
+      saveAs(blob, filename);
 
       toast({
         title: "Download complete",
-        description: `${selectedPhotosList.length} photos have been downloaded.`,
+        description: `Your photos have been downloaded.`,
         variant: "success",
       });
     } catch (error) {
@@ -143,38 +251,49 @@ export default function EventPhotosPage() {
       });
     } finally {
       setIsDownloading(false);
+      setDownloadType(null);
     }
   };
 
-  // Download all photos
+  // For all photos download
   const handleDownloadAll = async () => {
     if (!photos || photos.length === 0) return;
 
     setIsDownloading(true);
+    setDownloadType("all");
     try {
-      const zip = new JSZip();
-
       toast({
         title: "Preparing download",
-        description: `Preparing ${photos.length} photos for download...`,
+        description: `Downloading all ${photos.length} photos...`,
       });
 
-      // Download each photo and add to ZIP
-      const promises = photos.map(async (photo, index) => {
-        const response = await fetch(photo.urls.original);
-        const blob = await response.blob();
-        zip.file(`photo-${index + 1}.jpg`, blob);
-      });
+      // Fetch the zip file
+      const response = await fetch(`/api/download-photos?eventId=${eventId}`);
 
-      await Promise.all(promises);
+      if (!response.ok) {
+        throw new Error(`Download failed: ${response.statusText}`);
+      }
 
-      // Generate and save ZIP file
-      const content = await zip.generateAsync({ type: "blob" });
-      saveAs(content, `${event?.name || "event"}-all-photos.zip`);
+      // Get file name from Content-Disposition header if available
+      const contentDisposition = response.headers.get("Content-Disposition");
+      let filename = `${event?.name || "event"}-photos.zip`;
+
+      if (contentDisposition) {
+        const matches = /filename="([^"]+)"/.exec(contentDisposition);
+        if (matches && matches[1]) {
+          filename = matches[1];
+        }
+      }
+
+      // Get the zip as a blob
+      const blob = await response.blob();
+
+      // Use saveAs to download it
+      saveAs(blob, filename);
 
       toast({
         title: "Download complete",
-        description: `${photos.length} photos have been downloaded.`,
+        description: `All photos have been downloaded.`,
         variant: "success",
       });
     } catch (error) {
@@ -186,13 +305,15 @@ export default function EventPhotosPage() {
       });
     } finally {
       setIsDownloading(false);
+      setDownloadType(null);
     }
   };
 
   if (isEventLoading || isPhotosLoading) {
     return (
-      <div className="flex h-[calc(100vh-80px)] w-full items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      <div className="flex h-[calc(100vh-80px)] w-full flex-col items-center justify-center">
+        <Loader2 className="mb-4 h-8 w-8 animate-spin text-muted-foreground" />
+        <p className="text-muted-foreground">Loading photos...</p>
       </div>
     );
   }
@@ -220,93 +341,124 @@ export default function EventPhotosPage() {
   }
 
   return (
-    <div className="container mx-auto py-8">
-      <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold">{event.name} Photos</h1>
-          <p className="text-muted-foreground">
-            {photos.length} photo{photos.length !== 1 ? "s" : ""}
-          </p>
+    <div className="container mx-auto px-4 py-8">
+      {/* Redesigned header section */}
+      <div className="mb-8">
+        {/* Top section with event info and back button */}
+        <div className="mb-6 flex items-start justify-between">
+          <div>
+            <h1 className="mt-2 text-3xl font-bold">{event.name} Photos</h1>
+
+            <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+              <div className="flex items-center gap-1">
+                <Camera className="h-4 w-4" />
+                <span>
+                  {photos.length} photo{photos.length !== 1 ? "s" : ""}
+                </span>
+              </div>
+
+              {event.date && (
+                <div className="flex items-center gap-1">
+                  <CalendarIcon className="h-4 w-4" />
+                  <span>
+                    {formatRelative(new Date(event.date), new Date())}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
-        <div className="flex flex-wrap gap-3">
-          <Button
-            variant="outline"
-            onClick={selectAllPhotos}
-            className="flex items-center gap-2"
-          >
-            {selectedPhotos.size === photos.length ? (
-              <>
-                <X className="h-4 w-4" />
-                Deselect All
-              </>
-            ) : (
-              <>
-                <Check className="h-4 w-4" />
-                Select All
-              </>
-            )}
-          </Button>
+        {/* Photo controls section with download buttons side-by-side */}
+        <div className="mb-6">
+          <div className="grid grid-cols-2 gap-2 sm:max-w-sm">
+            <Button
+              variant="default"
+              size="sm"
+              onClick={handleDownloadAll}
+              disabled={isDownloading}
+              className="flex h-10 items-center justify-center gap-1.5"
+            >
+              {isDownloading && downloadType === "all" ? (
+                <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="mr-1 h-4 w-4" />
+              )}
+              <span className="text-sm">Download All</span>
+            </Button>
 
-          <Button
-            variant="outline"
-            onClick={handleDownloadSelected}
-            disabled={selectedPhotos.size === 0 || isDownloading}
-            className="flex items-center gap-2"
-          >
-            {isDownloading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Download className="h-4 w-4" />
-            )}
-            Download Selected ({selectedPhotos.size})
-          </Button>
-
-          <Button
-            onClick={handleDownloadAll}
-            disabled={isDownloading}
-            className="flex items-center gap-2"
-          >
-            {isDownloading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Download className="h-4 w-4" />
-            )}
-            Download All
-          </Button>
+            <Button
+              variant={selectedPhotos.size > 0 ? "default" : "outline"}
+              size="sm"
+              onClick={handleDownloadSelected}
+              disabled={selectedPhotos.size === 0 || isDownloading}
+              className="flex h-10 items-center justify-center gap-1.5"
+            >
+              {isDownloading && downloadType === "selected" ? (
+                <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="mr-1 h-4 w-4" />
+              )}
+              <span className="text-sm">
+                {selectedPhotos.size > 0
+                  ? `Selected (${selectedPhotos.size})`
+                  : "Select to Download"}
+              </span>
+            </Button>
+          </div>
         </div>
       </div>
 
-      {/* Photo Grid */}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-        {photos.map((photo) => (
-          <div key={photo.id} className="group relative aspect-square">
+      {/* Photo grid */}
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
+        {photosArray.map((photo) => (
+          <div
+            key={photo.id}
+            onClick={() => openPhoto(photo)}
+            className="group relative aspect-square w-full cursor-pointer overflow-hidden rounded-md"
+          >
             <div className="absolute left-2 top-2 z-10">
               <Checkbox
                 checked={selectedPhotos.has(photo.id)}
-                onCheckedChange={() => togglePhotoSelection(photo.id)}
+                onCheckedChange={() => {
+                  togglePhotoSelection(photo.id);
+                }}
+                onClick={(e) => e.stopPropagation()}
                 className="h-5 w-5 rounded-sm border-2 border-white bg-black/20 ring-offset-0 focus:ring-0 data-[state=checked]:bg-primary"
               />
             </div>
 
             <Image
-              src={photo.urls.original}
+              src={photo.urls.thumbnail}
               alt={`Photo ${photo.id}`}
-              fill
-              className="cursor-pointer rounded-md object-cover transition-all hover:brightness-90"
-              onClick={() => setSelectedPhoto(photo)}
+              className="h-full w-full cursor-pointer rounded-md object-cover transition-transform duration-300 ease-in-out hover:scale-[1.02] group-hover:brightness-90"
+              width={500}
+              height={500}
+              loading="lazy"
             />
 
-            <div className="absolute bottom-2 right-2 z-10 opacity-0 transition-opacity group-hover:opacity-100">
+            <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+
+            <div className="absolute bottom-2 right-2 z-10 flex gap-2 opacity-0 transition-opacity group-hover:opacity-100">
               <Button
                 variant="secondary"
                 size="icon"
-                className="h-8 w-8 rounded-full"
-                onClick={() => handleDownloadSingle(photo)}
+                className="h-8 w-8 rounded-full bg-white/30 backdrop-blur-sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDownloadSingle(photo);
+                }}
               >
                 <Download className="h-4 w-4" />
               </Button>
             </div>
+
+            {photo?.likes?.count > 0 && (
+              <div className="absolute bottom-2 left-2 z-10 flex items-center gap-1 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100">
+                <Heart className="h-3 w-3 fill-white" />
+                <span>{photo.likes.count}</span>
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -314,48 +466,158 @@ export default function EventPhotosPage() {
       {/* Photo Viewer Modal */}
       <Dialog
         open={selectedPhoto !== null}
-        onOpenChange={(open) => !open && setSelectedPhoto(null)}
+        onOpenChange={(open) => {
+          if (!open) closePhoto();
+        }}
       >
-        <DialogContent className="max-w-5xl sm:max-w-[90vw]">
-          <DialogHeader>
-            <DialogTitle>Photo Preview</DialogTitle>
-          </DialogHeader>
-
-          {selectedPhoto && (
-            <div className="flex flex-col items-center justify-center">
-              <div className="relative max-h-[70vh] w-full">
-                <Image
-                  src={selectedPhoto.urls.original}
-                  alt={`Photo ${selectedPhoto.id}`}
-                  layout="responsive"
-                  width={800}
-                  height={600}
-                  objectFit="contain"
-                />
-              </div>
-
-              <DialogFooter className="mt-4 sm:justify-between">
-                <div className="flex items-center gap-2">
-                  <Checkbox
-                    checked={selectedPhotos.has(selectedPhoto.id)}
-                    onCheckedChange={() =>
-                      togglePhotoSelection(selectedPhoto.id)
-                    }
-                    id="select-photo"
-                  />
-                  <label htmlFor="select-photo">Select photo</label>
-                </div>
+        <DialogContent className="max-w-5xl overflow-hidden border-none bg-black/90 p-0 sm:max-w-[90vw]">
+          <div className="relative flex h-[90vh] w-full flex-col">
+            {/* Top Bar */}
+            <div className="absolute left-0 right-0 top-0 z-10 flex items-center justify-between bg-gradient-to-b from-black/80 to-transparent p-4">
+              <DialogTitle className="text-white">{event?.name}</DialogTitle>
+              <div className="flex gap-2">
+                {isOrganizer && selectedPhoto && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 rounded-full text-white hover:bg-white/20"
+                    onClick={() => setPhotoToDelete(selectedPhoto)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                )}
 
                 <Button
-                  onClick={() => handleDownloadSingle(selectedPhoto)}
-                  className="flex items-center gap-2"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 rounded-full text-white hover:bg-white/20"
+                  onClick={() =>
+                    selectedPhoto && handleDownloadSingle(selectedPhoto)
+                  }
                 >
                   <Download className="h-4 w-4" />
-                  Download
                 </Button>
-              </DialogFooter>
+
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 rounded-full text-white hover:bg-white/20"
+                  onClick={() => selectedPhoto && sharePhoto(selectedPhoto)}
+                >
+                  <Share2 className="h-4 w-4" />
+                </Button>
+
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 rounded-full text-white hover:bg-white/20"
+                  onClick={closePhoto}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
-          )}
+
+            {/* Main Image */}
+            <div className="flex h-full items-center justify-center">
+              {selectedPhoto && (
+                <div className="flex h-full max-h-[calc(90vh-120px)] w-full items-center justify-center p-6">
+                  <Image
+                    src={selectedPhoto.urls.medium}
+                    alt={`Photo ${selectedPhoto.id}`}
+                    className="max-h-full max-w-full rounded-md object-contain"
+                    width={1200}
+                    height={900}
+                    unoptimized
+                    priority
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Bottom Navigation */}
+            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4">
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-white">
+                  {selectedPhoto && photos && (
+                    <>
+                      {photos.findIndex((p) => p.id === selectedPhoto.id) + 1}{" "}
+                      of {photos.length}
+                    </>
+                  )}
+                </div>
+
+                <div className="flex gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-white hover:bg-white/20"
+                    onClick={() => {
+                      if (!photos || !selectedPhoto) return;
+                      const currentIndex = photos.findIndex(
+                        (p) => p.id === selectedPhoto.id,
+                      );
+                      const prevIndex =
+                        (currentIndex - 1 + photos.length) % photos.length;
+                      openPhoto(photos[prevIndex] as Photo);
+                    }}
+                  >
+                    Previous
+                  </Button>
+
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-white hover:bg-white/20"
+                    onClick={() => {
+                      if (!photos || !selectedPhoto) return;
+                      const currentIndex = photos.findIndex(
+                        (p) => p.id === selectedPhoto.id,
+                      );
+                      const nextIndex = (currentIndex + 1) % photos.length;
+                      openPhoto(photos[nextIndex] as Photo);
+                    }}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={photoToDelete !== null}
+        onOpenChange={(open) => !open && setPhotoToDelete(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Photo</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this photo? This action cannot be
+              undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPhotoToDelete(null)}>
+              Cancel
+            </Button>
+            <Button
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={handleDeletePhoto}
+            >
+              {deletePhotoMutation.isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                "Delete"
+              )}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

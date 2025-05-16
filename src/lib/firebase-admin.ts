@@ -6,7 +6,7 @@ import { getFirestore } from "firebase-admin/firestore";
 
 function initAdmin() {
   const apps = getApps();
-  
+
   if (apps.length > 0) {
     return apps[0];
   }
@@ -17,7 +17,7 @@ function initAdmin() {
       clientEmail: env.FIREBASE_CLIENT_EMAIL,
       privateKey: env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, "\n"),
     }),
-    storageBucket: `${env.NEXT_PUBLIC_FIREBASE_PROJECT_ID}.appspot.com`,
+    storageBucket: `gs://${env.NEXT_PUBLIC_FIREBASE_PROJECT_ID}.firebasestorage.app`,
   };
 
   return initializeApp(firebaseAdminConfig);

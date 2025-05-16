@@ -1,56 +1,69 @@
-import { useState } from "react";
 import { Heart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { api } from "@/trpc/react";
 import { useAuth } from "@/providers/auth-provider";
+import { useState } from "react";
 
 interface LikeButtonProps {
   photoId: string;
   eventId: string;
-  initialLikes: number;
-  initialLikedByUser: boolean;
+  isLiked: boolean;
+  likesCount: number;
+  onToggle: (liked: boolean) => void;
 }
 
 export function LikeButton({
   photoId,
   eventId,
-  initialLikes,
-  initialLikedByUser,
+  isLiked,
+  likesCount,
+  onToggle,
 }: LikeButtonProps) {
-  const [liked, setLiked] = useState(initialLikedByUser);
-  const [likeCount, setLikeCount] = useState(initialLikes ?? 0);
   const { user } = useAuth();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const utils = api.useUtils();
 
   const toggleLike = api.photo.toggleLike.useMutation({
-    onMutate: () => {
-      // Optimistically update UI
-      setLiked(!liked);
-      setLikeCount((prev) => (liked ? prev - 1 : prev + 1));
+    onSuccess: () => {
+      // Invalidate queries to keep data fresh for future views
+      utils.photo.getPhotoById.invalidate({ photoId, eventId });
+      setIsSubmitting(false);
     },
     onError: () => {
       // Revert on error
-      setLiked(liked);
-      setLikeCount((prev) => (liked ? prev + 1 : prev - 1));
+      onToggle(isLiked);
+      setIsSubmitting(false);
     },
   });
 
   const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation();
+    if (!user || isSubmitting) return;
 
-    if (!user) return;
-    void toggleLike.mutate({ photoId, eventId });
+    // Set submitting flag
+    setIsSubmitting(true);
+
+    // Update UI immediately
+    const newLiked = !isLiked;
+    onToggle(newLiked);
+
+    // Perform server mutation
+    toggleLike.mutate({ photoId, eventId });
   };
 
   return (
     <Button
       variant="outline"
       size="sm"
-      className={cn("gap-2 transition-all", liked && "bg-white text-black")}
+      className={cn("gap-2 transition-all", isLiked && "bg-white text-black")}
       onClick={handleClick}
+      disabled={isSubmitting}
     >
-      <Heart className={cn("h-4 w-4", liked && "fill-red-500 text-red-500")} />
-      {likeCount}
+      <Heart
+        className={cn("h-4 w-4", isLiked && "fill-red-500 text-red-500")}
+      />
+      {likesCount}
     </Button>
   );
 }

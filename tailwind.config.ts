@@ -12,8 +12,8 @@ export default {
       },
       keyframes: {
         "pulse-subtle": {
-          "0%, 100%": { backgroundColor: "var(--subtle-from)" },
-          "50%": { backgroundColor: "var(--subtle-to)" },
+          "0%, 100%": { backgroundColor: "var(--primary)" },
+          "50%": { backgroundColor: "var(--primary)" },
         },
       },
       utilities: {

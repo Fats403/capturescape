@@ -1,38 +1,64 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-interface TokenResponse {
-  valid: boolean;
-}
+// Define paths that don't require authentication
+const publicPaths = ["/login", "/register"];
+
+// Define paths with custom logic
+const customPaths = {
+  // Event pages: redirect to join page if not authenticated
+  eventPage: {
+    pattern: /^\/events\/([^\/]+)$/,
+    handler: (request: NextRequest, matches: RegExpExecArray) => {
+      const token = request.cookies.get("token")?.value;
+      const eventId = matches[1];
+
+      if (!token) {
+        return NextResponse.redirect(
+          new URL(`/events/${eventId}/join`, request.url),
+        );
+      }
+
+      return null; // Continue with normal auth check
+    },
+  },
+
+  // Join pages: always public
+  joinPage: {
+    pattern: /^\/events\/([^\/]+)\/join$/,
+    handler: () => NextResponse.next(),
+  },
+
+  photosPage: {
+    pattern: /^\/events\/([^\/]+)\/photos$/,
+    handler: () => NextResponse.next(),
+  },
+};
 
 export async function middleware(request: NextRequest) {
-  const token = request.cookies.get("token")?.value;
   const { pathname } = request.nextUrl;
+  const token = request.cookies.get("token")?.value;
 
-  // Check if we're on an event route
-  const eventMatch = /^\/events\/([^\/]+)$/.exec(pathname);
-  const joinMatch = /^\/events\/([^\/]+)\/join$/.exec(pathname);
+  // 1. Check for public paths
+  if (publicPaths.some((path) => pathname.startsWith(path))) {
+    return NextResponse.next();
+  }
 
-  if (eventMatch || joinMatch) {
-    const eventId = (eventMatch ?? joinMatch)?.[1];
-
-    if (!token && eventMatch) {
-      // If not authenticated and on main event page, redirect to join page
-      return NextResponse.redirect(
-        new URL(`/events/${eventId}/join`, request.url),
-      );
-    }
-
-    if (joinMatch) {
-      return NextResponse.next();
+  // 2. Check for paths with custom logic
+  for (const [_, customPath] of Object.entries(customPaths)) {
+    const matches = customPath.pattern.exec(pathname);
+    if (matches) {
+      const result = customPath.handler(request, matches);
+      if (result) return result;
     }
   }
 
-  // Only verify token for non-join pages
+  // 3. All other paths require authentication
   if (!token) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
+  // 4. Verify token is valid
   try {
     await fetch(new URL("/api/verify-token", request.url), {
       method: "POST",
@@ -46,16 +72,19 @@ export async function middleware(request: NextRequest) {
 
     return NextResponse.next();
   } catch (error) {
-    if (!joinMatch) {
-      return NextResponse.redirect(new URL("/login", request.url));
-    }
-    return NextResponse.next();
+    return NextResponse.redirect(new URL("/login", request.url));
   }
 }
 
 export const config = {
   matcher: [
+    // Protected paths
     "/dashboard/:path*",
-    "/events/:path*", // Add events paths to the matcher
+    "/events/:path*",
+    "/photos",
+    // Public paths (still need to be matched to skip auth checks)
+    "/login",
+    "/register",
+    "/reset-password",
   ],
 };

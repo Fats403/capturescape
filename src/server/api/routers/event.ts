@@ -300,7 +300,7 @@ export const eventRouter = createTRPCRouter({
 
         // 4. Create download link - this can be customized based on your app's structure
         const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
-        const downloadUrl = `${baseUrl}/events/${eventId}/photos?download=all`;
+        const downloadUrl = `${baseUrl}/events/${eventId}/photos`;
 
         // 5. Send emails to all participants
         const emailPromises = participants

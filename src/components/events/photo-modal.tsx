@@ -3,9 +3,10 @@ import Image from "next/image";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { type Photo } from "@/lib/types/event";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { LikeButton } from "@/components/events/like-button";
 import { useAuth } from "@/providers/auth-provider";
+import { api } from "@/trpc/react";
 
 interface PhotoModalProps {
   photo: Photo | null;
@@ -13,6 +14,32 @@ interface PhotoModalProps {
 }
 
 export function PhotoModal({ photo, onClose }: PhotoModalProps) {
+  const { user } = useAuth();
+
+  // Fetch fresh photo data when modal opens
+  const { data: freshPhoto } = api.photo.getPhotoById.useQuery(
+    { photoId: photo?.id || "", eventId: photo?.eventId || "" },
+    {
+      enabled: !!photo,
+      refetchOnWindowFocus: false,
+    },
+  );
+
+  // Use the most up-to-date photo data
+  const currentPhoto = freshPhoto || photo;
+
+  // Track like state internally for smooth transitions
+  const [liked, setLiked] = useState(false);
+  const [likeCount, setLikeCount] = useState(0);
+
+  // Update internal state when fresh data arrives
+  useEffect(() => {
+    if (currentPhoto && user) {
+      setLiked(currentPhoto.likes?.userIds.includes(user.uid) || false);
+      setLikeCount(currentPhoto.likes?.count || 0);
+    }
+  }, [currentPhoto, user]);
+
   // Lock body scroll when modal is open
   useEffect(() => {
     if (photo) {
@@ -25,7 +52,11 @@ export function PhotoModal({ photo, onClose }: PhotoModalProps) {
     };
   }, [photo]);
 
-  const { user } = useAuth();
+  // Handle like toggle within the modal
+  const handleLikeToggle = (newLiked: boolean) => {
+    setLiked(newLiked);
+    setLikeCount((prev) => (newLiked ? prev + 1 : prev - 1));
+  };
 
   if (!photo) return null;
 
@@ -56,7 +87,7 @@ export function PhotoModal({ photo, onClose }: PhotoModalProps) {
           <div className="relative flex h-full w-full items-center justify-center">
             <div className="relative max-h-[85vh] w-auto">
               <Image
-                src={photo.urls.medium}
+                src={currentPhoto?.urls.medium || ""}
                 alt=""
                 className="rounded-lg object-contain"
                 style={{
@@ -72,12 +103,11 @@ export function PhotoModal({ photo, onClose }: PhotoModalProps) {
               />
               <div className="absolute bottom-4 left-4 z-50">
                 <LikeButton
-                  photoId={photo.id}
-                  eventId={photo.eventId}
-                  initialLikes={photo.likes?.count ?? 0}
-                  initialLikedByUser={photo.likes?.userIds.includes(
-                    user?.uid ?? "",
-                  )}
+                  photoId={currentPhoto?.id || ""}
+                  eventId={currentPhoto?.eventId || ""}
+                  isLiked={liked}
+                  likesCount={likeCount}
+                  onToggle={handleLikeToggle}
                 />
               </div>
             </div>

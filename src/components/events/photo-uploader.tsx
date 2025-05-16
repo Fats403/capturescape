@@ -224,18 +224,17 @@ const PhotoUploader = ({ eventId, className = "" }: PhotoUploaderProps) => {
     <div className="flex h-full w-full flex-col items-center justify-center p-6">
       <div className="max-w-md text-center">
         <h2 className="text-2xl font-semibold sm:text-3xl">Take a Photo</h2>
-        <p className="mt-2 text-muted-foreground">
-          Capture a moment to share with your event guests
-        </p>
       </div>
 
       <div className="mt-10 flex flex-col items-center">
         <label
           className={cn(
-            "flex aspect-square w-36 cursor-pointer flex-col items-center justify-center rounded-full border-2 border-dashed border-muted-foreground/25 bg-muted/50 text-muted-foreground transition-all hover:bg-muted hover:text-foreground sm:w-44 md:w-48",
+            "relative flex aspect-square w-36 cursor-pointer flex-col items-center justify-center rounded-full border-2 border-dashed border-primary/30 bg-primary/5 text-primary transition-all hover:bg-primary/10 sm:w-44 md:w-48",
             className,
           )}
         >
+          <div className="absolute inset-0 animate-pulse rounded-full bg-primary/10"></div>
+
           <input
             type="file"
             accept="image/*"
@@ -243,8 +242,10 @@ const PhotoUploader = ({ eventId, className = "" }: PhotoUploaderProps) => {
             onChange={handleCapture}
             className="hidden"
           />
-          <Camera className="mb-2 h-10 w-10 sm:h-12 sm:w-12" />
-          <span className="text-sm sm:text-base">Tap to capture</span>
+          <Camera className="relative z-10 mb-2 h-10 w-10 text-primary sm:h-12 sm:w-12" />
+          <span className="relative z-10 text-sm font-medium text-primary sm:text-base">
+            Tap to capture
+          </span>
         </label>
 
         <p className="mt-6 max-w-xs text-center text-sm text-muted-foreground">
