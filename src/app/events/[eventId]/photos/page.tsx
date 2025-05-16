@@ -117,7 +117,14 @@ export default function EventPhotosPage() {
         description: "The photo has been permanently deleted",
         variant: "success",
       });
-      // Close the delete dialog and refresh photo list
+
+      if (photoToDelete) {
+        const newSelected = new Set(selectedPhotos);
+        newSelected.delete(photoToDelete.id);
+
+        setSelectedPhotos(newSelected);
+      }
+
       setPhotoToDelete(null);
       // Invalidate queries to refetch photos
       void utils.event.getEventPhotos.invalidate({ eventId });

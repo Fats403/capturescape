@@ -10,6 +10,7 @@ import {
   Info,
   type LucideIcon,
   Camera,
+  Calendar,
 } from "lucide-react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
@@ -60,6 +61,12 @@ const eventNavigationItems: NavItem[] = [
     label: "Guests",
     href: "/events/{id}/guests",
     matchPattern: /^\/events\/[^/]+\/guests/,
+  },
+  {
+    icon: Calendar,
+    label: "Event",
+    href: "/events/{id}/settings",
+    matchPattern: /^\/events\/[^/]+\/settings/,
   },
 ];
 
