@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
 import { api } from "@/trpc/react";
 import {
@@ -12,6 +12,7 @@ import {
   Trash2,
   Camera,
   CalendarIcon,
+  InfoIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -29,6 +30,7 @@ import { useAuth } from "@/providers/auth-provider";
 import Image from "next/image";
 import { saveAs } from "file-saver";
 import { formatRelative } from "date-fns";
+import { useSwipeable } from "react-swipeable";
 
 export default function EventPhotosPage() {
   const params = useParams();
@@ -47,6 +49,10 @@ export default function EventPhotosPage() {
   const [downloadType, setDownloadType] = useState<"all" | "selected" | null>(
     null,
   );
+  const [showSwipeHint, setShowSwipeHint] = useState(false);
+
+  // First, add a ref to track if we've shown the hint
+  const shownSwipeHintRef = useRef(false);
 
   // Fetch event details
   const { data: event, isLoading: isEventLoading } = api.event.getById.useQuery(
@@ -316,6 +322,44 @@ export default function EventPhotosPage() {
     }
   };
 
+  // Update the swipe handlers
+  const swipeHandlers = useSwipeable({
+    onSwipedLeft: () => {
+      if (!photos || !selectedPhoto) return;
+      const currentIndex = photos.findIndex((p) => p.id === selectedPhoto.id);
+      const nextIndex = (currentIndex + 1) % photos.length;
+      openPhoto(photos[nextIndex]!);
+    },
+    onSwipedRight: () => {
+      if (!photos || !selectedPhoto) return;
+      const currentIndex = photos.findIndex((p) => p.id === selectedPhoto.id);
+      const prevIndex = (currentIndex - 1 + photos.length) % photos.length;
+      openPhoto(photos[prevIndex]!);
+    },
+    preventScrollOnSwipe: true, // Use this instead of preventDefaultTouchmoveEvent
+    trackMouse: false,
+    delta: 10,
+  });
+
+  // Update the hint effect to only show once
+  useEffect(() => {
+    if (selectedPhoto && !shownSwipeHintRef.current) {
+      // Only show the hint on mobile devices
+      const isMobile = window.innerWidth < 768;
+      if (isMobile) {
+        setShowSwipeHint(true);
+        // Hide after 3 seconds
+        const timer = setTimeout(() => {
+          setShowSwipeHint(false);
+          shownSwipeHintRef.current = true; // Mark as shown
+        }, 1500);
+        return () => clearTimeout(timer);
+      }
+    } else if (!selectedPhoto) {
+      setShowSwipeHint(false);
+    }
+  }, [selectedPhoto]);
+
   if (isEventLoading || isPhotosLoading) {
     return (
       <div className="flex h-[calc(100vh-80px)] w-full flex-col items-center justify-center">
@@ -454,6 +498,16 @@ export default function EventPhotosPage() {
                 className="h-8 w-8 rounded-full bg-white/30 backdrop-blur-sm"
                 onClick={(e) => {
                   e.stopPropagation();
+                }}
+              >
+                <InfoIcon className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="secondary"
+                size="icon"
+                className="h-8 w-8 rounded-full bg-white/30 backdrop-blur-sm"
+                onClick={(e) => {
+                  e.stopPropagation();
                   void handleDownloadSingle(photo);
                 }}
               >
@@ -500,7 +554,7 @@ export default function EventPhotosPage() {
                   size="icon"
                   className="h-8 w-8 rounded-full text-white hover:bg-white/20"
                   onClick={() =>
-                    selectedPhoto && handleDownloadSingle(selectedPhoto)
+                    selectedPhoto && void handleDownloadSingle(selectedPhoto)
                   }
                 >
                   <Download className="h-4 w-4" />
@@ -526,19 +580,33 @@ export default function EventPhotosPage() {
               </div>
             </div>
 
-            {/* Main Image */}
+            {/* Main Image with Swipe Support */}
             <div className="flex h-full items-center justify-center">
               {selectedPhoto && (
                 <div className="flex h-full max-h-[calc(90vh-120px)] w-full items-center justify-center p-6">
-                  <Image
-                    src={selectedPhoto.urls.medium}
-                    alt={`Photo ${selectedPhoto.id}`}
-                    className="max-h-full max-w-full rounded-md object-contain"
-                    width={1200}
-                    height={900}
-                    unoptimized
-                    priority
-                  />
+                  <div
+                    {...swipeHandlers}
+                    className="flex h-full w-full items-center justify-center"
+                  >
+                    <Image
+                      src={selectedPhoto.urls.medium}
+                      alt={`Photo ${selectedPhoto.id}`}
+                      className="max-h-full max-w-full rounded-md object-contain"
+                      width={1200}
+                      height={900}
+                      unoptimized
+                      priority
+                    />
+
+                    {/* Swipe hint overlay */}
+                    {showSwipeHint && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/50 md:hidden">
+                        <div className="px-6 py-4 text-center text-white">
+                          <p>Swipe to navigate between photos</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>

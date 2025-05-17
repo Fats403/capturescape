@@ -25,7 +25,6 @@ type FilterType =
   | "none"
   | "grayscale"
   | "sepia"
-  | "blur"
   | "contrast"
   | "brightness"
   | "saturate"
@@ -36,7 +35,6 @@ const FILTERS: Record<FilterType, string> = {
   none: "none",
   grayscale: "grayscale(1)",
   sepia: "sepia(1)",
-  blur: "blur(4px)",
   contrast: "contrast(1.5)",
   brightness: "brightness(1.2)",
   saturate: "saturate(2)",
