@@ -16,9 +16,6 @@ export function EventCard({ event, onShare }: EventCardProps) {
   const renderEventTimeStatus = () => {
     const now = Date.now();
     const startDate = new Date(event.date);
-    // Access endDate even though it's not in the type definition
-    // The server code shows that endDate is actually saved in the database
-    // @ts-ignore - endDate exists in the database but not in the type
     const endDate = event.endDate ? new Date(event.endDate) : null;
 
     // If the event is currently active (now is between start and end dates)

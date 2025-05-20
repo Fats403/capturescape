@@ -223,14 +223,13 @@ export default function EventPhotosPage() {
       const response = await fetch(`/api/download-photos?eventId=${eventId}`);
 
       if (!response.ok) {
-        // If we get a specific error message from the API
-        if (
-          response.headers.get("Content-Type")?.includes("application/json")
-        ) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || "Download failed");
-        }
-        throw new Error(`Download failed: ${response.statusText}`);
+        toast({
+          title: "Download not available",
+          description:
+            "Photos can only be downloaded after the event is completed.",
+          variant: "destructive",
+        });
+        return;
       }
 
       // Get the zip as a blob

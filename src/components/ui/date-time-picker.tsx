@@ -118,10 +118,10 @@ export function DateTimePicker({
                   value={getHour(date)}
                   onChange={(e) => {
                     const newDate = updateDateTime(
-                      date || new Date(),
+                      date ?? new Date(),
                       e.target.value,
                       getMinute(date),
-                      getPeriod(date) as "AM" | "PM",
+                      getPeriod(date),
                     );
                     if (newDate) setDate(newDate);
                   }}
@@ -144,10 +144,10 @@ export function DateTimePicker({
                   value={getMinute(date)}
                   onChange={(e) => {
                     const newDate = updateDateTime(
-                      date || new Date(),
+                      date ?? new Date(),
                       getHour(date),
                       e.target.value,
-                      getPeriod(date) as "AM" | "PM",
+                      getPeriod(date),
                     );
                     if (newDate) setDate(newDate);
                   }}
@@ -171,7 +171,7 @@ export function DateTimePicker({
                   value={getPeriod(date)}
                   onChange={(e) => {
                     const newDate = updateDateTime(
-                      date || new Date(),
+                      date ?? new Date(),
                       getHour(date),
                       getMinute(date),
                       e.target.value as "AM" | "PM",
