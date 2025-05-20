@@ -5,32 +5,19 @@ import { useParams, useRouter } from "next/navigation";
 import { api } from "@/trpc/react";
 import { Button } from "@/components/ui/button";
 import { Download, Camera } from "lucide-react";
-import { useEffect, useState } from "react";
-import { isAfter, addDays, format } from "date-fns";
 import Image from "next/image";
+import { format } from "date-fns";
 
 export default function GalleryPage() {
   const params = useParams();
   const router = useRouter();
   const eventId = params.eventId as string;
-  const [isEventOver, setIsEventOver] = useState(false);
 
-  // Fetch event details to check date
+  // Fetch event details to if its completed
   const { data: event, isLoading } = api.event.getById.useQuery(
     { id: eventId },
     { enabled: Boolean(eventId) },
   );
-
-  // Check if event is over (more than 1 day has passed since the event date)
-  useEffect(() => {
-    if (event?.date) {
-      const eventDate = new Date(event.date);
-      const dayAfterEvent = addDays(eventDate, 1);
-      const now = new Date();
-
-      setIsEventOver(isAfter(now, dayAfterEvent));
-    }
-  }, [event]);
 
   // Navigate to photos download page
   const goToPhotosPage = () => {
@@ -48,7 +35,7 @@ export default function GalleryPage() {
     );
   }
 
-  if (isEventOver) {
+  if (event?.status === "completed") {
     return (
       <div className="flex h-[calc(100vh-80px)] w-full flex-col items-center justify-center p-4">
         <div className="max-w-md text-center">

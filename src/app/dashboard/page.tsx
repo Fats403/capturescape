@@ -17,7 +17,6 @@ export default function DashboardPage() {
   const { toast } = useToast();
 
   const { data: events, isLoading } = api.event.getAll.useQuery();
-  const { mutate: sendPhotoEmails } = api.event.sendPhotoEmails.useMutation();
 
   const handleShare = async (eventId: string) => {
     try {
@@ -30,38 +29,6 @@ export default function DashboardPage() {
       });
     } catch (error) {
       console.error("Error sharing:", error);
-    }
-  };
-
-  const handleSendPhotos = (eventId: string) => {
-    try {
-      toast({
-        title: "Sending emails...",
-        description:
-          "Email invitations to download photos will be sent shortly.",
-      });
-
-      sendPhotoEmails(
-        { eventId },
-        {
-          onSuccess: () => {
-            toast({
-              title: "Success!",
-              description: "Emails have been sent to all event participants.",
-              variant: "success",
-            });
-          },
-          onError: (error) => {
-            toast({
-              title: "Error",
-              description: error.message || "Failed to send emails",
-              variant: "destructive",
-            });
-          },
-        },
-      );
-    } catch (error) {
-      console.error("Error sending photo emails:", error);
     }
   };
 
@@ -106,7 +73,6 @@ export default function DashboardPage() {
                     key={event.id}
                     event={event}
                     onShare={() => handleShare(event.id)}
-                    onSendPhotos={handleSendPhotos}
                   />
                 ))
               )}
@@ -127,7 +93,6 @@ export default function DashboardPage() {
                     key={event.id}
                     event={event}
                     onShare={() => handleShare(event.id)}
-                    onSendPhotos={handleSendPhotos}
                   />
                 ))
               )}

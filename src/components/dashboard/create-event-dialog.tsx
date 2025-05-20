@@ -23,13 +23,11 @@ import {
 import { ProgressDots } from "../ui/progress-dots";
 import { Input } from "../ui/input";
 import { Textarea } from "../ui/textarea";
-import { Calendar } from "../ui/calendar";
 import { Switch } from "../ui/switch";
 import { Slider } from "../ui/slider";
 import { Checkbox } from "../ui/checkbox";
 import { blockContentCategories } from "@/lib/constants";
 import { Label } from "@/components/ui/label";
-import { DelayedMount } from "@/components/ui/delayed-mount";
 import { nanoid } from "nanoid";
 import { Card, CardContent } from "../ui/card";
 import { CoverImageUpload } from "./cover-image-upload";
@@ -40,6 +38,7 @@ import {
   type EventCreationFormValues,
   eventCreationSchema,
 } from "@/lib/validations/event";
+import { DateTimePicker } from "@/components/ui/date-time-picker";
 
 interface CreateEventDialogProps {
   open: boolean;
@@ -71,6 +70,8 @@ export function CreateEventDialog({
       name: "",
       description: "",
       coverImage: "",
+      date: new Date(),
+      endDate: new Date(),
     },
   });
 
@@ -367,12 +368,19 @@ function CreateEventStep3({
 }: {
   form: UseFormReturn<EventCreationFormValues>;
 }) {
+  // Get one week from now for end date validation
+  const getMaxEndDate = (startDate: Date) => {
+    const maxDate = new Date(startDate);
+    maxDate.setDate(maxDate.getDate() + 7);
+    return maxDate;
+  };
+
   return (
     <div className="space-y-6">
       <div className="text-center">
         <h2 className="text-lg font-semibold">When is your event?</h2>
         <p className="text-sm text-muted-foreground">
-          Select the date of your event
+          Select the start and end date/time of your event
         </p>
       </div>
 
@@ -381,21 +389,58 @@ function CreateEventStep3({
         name="date"
         render={({ field }) => (
           <FormItem className="flex flex-col">
+            <FormLabel>Start Date & Time</FormLabel>
             <FormControl>
-              <div className="mx-auto">
-                <DelayedMount delay={100}>
-                  <Calendar
-                    mode="single"
-                    selected={field.value}
-                    onSelect={field.onChange}
-                    disabled={(date) => date < new Date()}
-                    initialFocus
-                    className="rounded-md border"
-                  />
-                </DelayedMount>
-              </div>
+              <DateTimePicker
+                date={field.value}
+                setDate={(date) => {
+                  field.onChange(date);
+
+                  // If end date is not set or is before start date,
+                  // automatically set it to 1 hour after start
+                  const endDate = form.getValues("endDate");
+                  if (date && (!endDate || endDate <= date)) {
+                    const newEndDate = new Date(date);
+                    newEndDate.setHours(date.getHours() + 1);
+                    form.setValue("endDate", newEndDate, {
+                      shouldValidate: true,
+                    });
+                  }
+                }}
+                placeholder="Select start date and time"
+                disabledDates={(date) => date < new Date()}
+              />
             </FormControl>
-            <FormMessage className="pt-4 text-center" />
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+
+      <FormField
+        control={form.control}
+        name="endDate"
+        render={({ field }) => (
+          <FormItem className="flex flex-col">
+            <FormLabel>End Date & Time</FormLabel>
+            <FormControl>
+              <DateTimePicker
+                date={field.value}
+                setDate={field.onChange}
+                placeholder="Select end date and time"
+                disabledDates={(date) => {
+                  const startDate = form.getValues("date");
+                  if (!startDate) return date < new Date();
+
+                  // End date must be same day or after start date
+                  // And within one week of start date
+                  return date < startDate || date > getMaxEndDate(startDate);
+                }}
+              />
+            </FormControl>
+            <FormDescription>
+              Must be after the start date and within one week
+            </FormDescription>
+            <FormMessage />
           </FormItem>
         )}
       />

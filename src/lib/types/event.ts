@@ -2,6 +2,7 @@ export interface Event {
   id: string;
   name: string;
   date: number;
+  endDate: number;
   description?: string;
   coverImage: string;
   organizerId: string;
@@ -14,6 +15,10 @@ export interface Event {
     categories: string[];
   };
   emailsSentAt?: number;
+  status: "active" | "completed";
+  archivePath?: string;
+  archiveLastUpdated: string;
+  archivePhotoCount?: number;
 }
 
 export interface User {

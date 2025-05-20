@@ -11,7 +11,6 @@ import { eventCreationSchema } from "@/lib/validations/event";
 import { z } from "zod";
 import { endOfDay, startOfDay } from "date-fns";
 import * as admin from "firebase-admin";
-import mailjet from "@/lib/mailjet";
 
 export const eventRouter = createTRPCRouter({
   create: protectedProcedure
@@ -29,11 +28,14 @@ export const eventRouter = createTRPCRouter({
 
         batch.set(eventRef, {
           ...input,
-          date: startOfDay(input.date).getTime(),
+          date: input.date.getTime(),
+          endDate: input.endDate.getTime(),
           organizerId: user.uid,
           createdAt: Date.now(),
           photoCount: 0,
           participantCount: 1,
+          status: "active",
+          archiveLastUpdated: null,
         });
 
         // Add organizer as first participant
@@ -232,151 +234,6 @@ export const eventRouter = createTRPCRouter({
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
           message: "Failed to fetch participants",
-          cause: error,
-        });
-      }
-    }),
-
-  sendPhotoEmails: protectedProcedure
-    .input(z.object({ eventId: z.string() }))
-    .mutation(async ({ ctx, input }) => {
-      const { user } = ctx;
-      const { eventId } = input;
-
-      try {
-        // 1. Get the event details
-        const eventDoc = await db.collection("events").doc(eventId).get();
-
-        if (!eventDoc.exists) {
-          throw new TRPCError({
-            code: "NOT_FOUND",
-            message: "Event not found",
-          });
-        }
-
-        const eventData = eventDoc.data() as Event;
-
-        // Verify user is the organizer
-        if (eventData.organizerId !== user.uid) {
-          throw new TRPCError({
-            code: "FORBIDDEN",
-            message: "Only the event organizer can send emails",
-          });
-        }
-
-        // 2. Get all participants with their emails
-        const participantsSnapshot = await db
-          .collection("events")
-          .doc(eventId)
-          .collection("participants")
-          .get();
-
-        if (participantsSnapshot.empty) {
-          throw new TRPCError({
-            code: "BAD_REQUEST",
-            message: "No participants found for this event",
-          });
-        }
-
-        const participants = participantsSnapshot.docs.map((doc) => ({
-          ...doc.data(),
-        })) as EventParticipant[];
-
-        // 3. Get user data for each participant to enhance email content
-        const userIds = participants.map((p) => p.userId);
-        const userDocs = await Promise.all(
-          userIds.map((uid) => db.collection("users").doc(uid).get()),
-        );
-
-        const usersData = userDocs.reduce(
-          (acc, doc) => {
-            if (doc.exists) {
-              acc[doc.id] = doc.data() as User;
-            }
-            return acc;
-          },
-          {} as Record<string, User>,
-        );
-
-        // 4. Create download link - this can be customized based on your app's structure
-        const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
-        const downloadUrl = `${baseUrl}/events/${eventId}/photos`;
-
-        // 5. Send emails to all participants
-        const emailPromises = participants
-          .filter((p) => p.email) // Only send to participants with emails
-          .map(async (participant) => {
-            const userData = usersData[participant.userId] ?? null;
-            const displayName =
-              userData?.displayName ??
-              participant.email?.split("@")[0] ??
-              "Guest";
-
-            // Prepare stats for the template
-            const photoCount = participant.photoCount ?? 0;
-
-            // Get total likes for this participant's photos
-            const photosSnapshot = await db
-              .collection("events")
-              .doc(eventId)
-              .collection("photos")
-              .where("uploaderId", "==", participant.userId)
-              .get();
-
-            const totalLikes = photosSnapshot.docs.reduce((sum, doc) => {
-              const photoData = doc.data() as Photo;
-              return sum + (photoData?.likes?.count ?? 0);
-            }, 0);
-
-            return mailjet.post("send", { version: "v3.1" }).request({
-              Messages: [
-                {
-                  From: {
-                    Email: "admin@capturescape.com",
-                    Name: "CaptureScape",
-                  },
-                  To: [
-                    {
-                      Email: participant.email,
-                      Name: displayName,
-                    },
-                  ],
-                  Subject: `Download Photos from ${eventData.name}`,
-                  TemplateID: 6984638,
-                  TemplateLanguage: true,
-                  Variables: {
-                    eventName: eventData.name,
-                    participantName: displayName,
-                    downloadUrl,
-                    photoCount,
-                    totalLikes,
-                    eventDate: new Date(eventData.date).toLocaleDateString(
-                      "en-US",
-                      {
-                        year: "numeric",
-                        month: "long",
-                        day: "numeric",
-                      },
-                    ),
-                  },
-                },
-              ],
-            });
-          });
-
-        await Promise.all(emailPromises);
-
-        // 6. Record that emails were sent
-        await db.collection("events").doc(eventId).update({
-          emailsSentAt: Date.now(),
-        });
-
-        return { success: true, emailsSent: emailPromises.length };
-      } catch (error) {
-        console.error("Failed to send event photo emails:", error);
-        throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message: "Failed to send emails",
           cause: error,
         });
       }

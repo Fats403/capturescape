@@ -31,6 +31,13 @@ import Image from "next/image";
 import { saveAs } from "file-saver";
 import { formatRelative } from "date-fns";
 import { useSwipeable } from "react-swipeable";
+import { motion, AnimatePresence } from "framer-motion";
+
+// Define the navigation directions more clearly
+type Direction = "next" | "prev";
+
+// Use a more explicit naming to avoid confusion
+type NavigateDirection = "next" | "prev";
 
 export default function EventPhotosPage() {
   const params = useParams();
@@ -43,16 +50,16 @@ export default function EventPhotosPage() {
   // Read photo ID from URL query parameter
   const photoIdFromUrl = searchParams.get("id");
 
-  const [selectedPhotos, setSelectedPhotos] = useState<Set<string>>(new Set());
   const [isDownloading, setIsDownloading] = useState(false);
   const [photoToDelete, setPhotoToDelete] = useState<Photo | null>(null);
-  const [downloadType, setDownloadType] = useState<"all" | "selected" | null>(
-    null,
-  );
   const [showSwipeHint, setShowSwipeHint] = useState(false);
 
   // First, add a ref to track if we've shown the hint
   const shownSwipeHintRef = useRef(false);
+
+  // Track only the essential state
+  const [currentPhoto, setCurrentPhoto] = useState<Photo | null>(null);
+  const [direction, setDirection] = useState<"left" | "right" | null>(null);
 
   // Fetch event details
   const { data: event, isLoading: isEventLoading } = api.event.getById.useQuery(
@@ -72,6 +79,11 @@ export default function EventPhotosPage() {
     photoIdFromUrl && photos
       ? (photos.find((photo) => photo.id === photoIdFromUrl) ?? null)
       : null;
+
+  // Update when selectedPhoto changes
+  useEffect(() => {
+    setCurrentPhoto(selectedPhoto);
+  }, [selectedPhoto]);
 
   // Function to open a photo (updates URL)
   const openPhoto = (photo: Photo) => {
@@ -124,13 +136,6 @@ export default function EventPhotosPage() {
         variant: "success",
       });
 
-      if (photoToDelete) {
-        const newSelected = new Set(selectedPhotos);
-        newSelected.delete(photoToDelete.id);
-
-        setSelectedPhotos(newSelected);
-      }
-
       setPhotoToDelete(null);
       // Invalidate queries to refetch photos
       void utils.event.getEventPhotos.invalidate({ eventId });
@@ -145,17 +150,6 @@ export default function EventPhotosPage() {
   });
 
   const utils = api.useUtils();
-
-  // Toggle photo selection
-  const togglePhotoSelection = (photoId: string) => {
-    const newSelected = new Set(selectedPhotos);
-    if (newSelected.has(photoId)) {
-      newSelected.delete(photoId);
-    } else {
-      newSelected.add(photoId);
-    }
-    setSelectedPhotos(newSelected);
-  };
 
   // Handle delete photo
   const handleDeletePhoto = async () => {
@@ -203,106 +197,47 @@ export default function EventPhotosPage() {
     }
   };
 
-  // For selected photos download
-  const handleDownloadSelected = async () => {
-    if (selectedPhotos.size === 0) {
-      toast({
-        title: "No photos selected",
-        description: "Please select at least one photo to download.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setIsDownloading(true);
-    setDownloadType("selected");
-    try {
-      const photoIds = Array.from(selectedPhotos).join(",");
-
-      toast({
-        title: "Preparing download",
-        description: `Downloading ${selectedPhotos.size} photos...`,
-      });
-
-      // Fetch the zip file
-      const response = await fetch(
-        `/api/download-photos?eventId=${eventId}&photoIds=${photoIds}`,
-      );
-
-      if (!response.ok) {
-        throw new Error(`Download failed: ${response.statusText}`);
-      }
-
-      // Get file name from Content-Disposition header if available
-      const contentDisposition = response.headers.get("Content-Disposition");
-      let filename = `${event?.name ?? "event"}-photos.zip`;
-
-      if (contentDisposition) {
-        const matches = /filename="([^"]+)"/.exec(contentDisposition);
-        if (matches?.[1]) {
-          filename = matches[1];
-        }
-      }
-
-      // Get the zip as a blob
-      const blob = await response.blob();
-
-      // Use saveAs to download it
-      saveAs(blob, filename);
-
-      toast({
-        title: "Download complete",
-        description: `Your photos have been downloaded.`,
-        variant: "success",
-      });
-    } catch (error) {
-      console.error("Download error:", error);
-      toast({
-        title: "Download failed",
-        description: "Failed to download photos. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsDownloading(false);
-      setDownloadType(null);
-    }
-  };
-
   // For all photos download
   const handleDownloadAll = async () => {
-    if (!photos || photos.length === 0) return;
+    if (!photos || photos.length === 0 || !event) return;
 
     setIsDownloading(true);
-    setDownloadType("all");
     try {
+      // Check if event is completed
+      if (event.status !== "completed") {
+        toast({
+          title: "Download not available",
+          description:
+            "Photos can only be downloaded after the event is completed.",
+          variant: "destructive",
+        });
+        return;
+      }
+
       toast({
         title: "Preparing download",
-        description: `Downloading all ${photos.length} photos...`,
+        description: `Getting all ${photos.length} photos...`,
       });
 
-      // Fetch the zip file
+      // Request the pre-generated zip file
       const response = await fetch(`/api/download-photos?eventId=${eventId}`);
 
       if (!response.ok) {
-        throw new Error(`Download failed: ${response.statusText}`);
-      }
-
-      // Get file name from Content-Disposition header if available
-      const contentDisposition = response.headers.get("Content-Disposition");
-      let filename = `${event?.name ?? "event"}-photos.zip`;
-
-      if (contentDisposition) {
-        const matches = /filename="([^"]+)"/.exec(contentDisposition);
-        if (matches?.[1]) {
-          filename = matches[1];
+        // If we get a specific error message from the API
+        if (
+          response.headers.get("Content-Type")?.includes("application/json")
+        ) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || "Download failed");
         }
+        throw new Error(`Download failed: ${response.statusText}`);
       }
 
       // Get the zip as a blob
       const blob = await response.blob();
 
       // Use saveAs to download it
-      saveAs(blob, filename);
+      saveAs(blob, `${event.name ?? "event"}-photos.zip`);
 
       toast({
         title: "Download complete",
@@ -313,33 +248,74 @@ export default function EventPhotosPage() {
       console.error("Download error:", error);
       toast({
         title: "Download failed",
-        description: "Failed to download photos. Please try again.",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Failed to download photos. Please try again.",
         variant: "destructive",
       });
     } finally {
       setIsDownloading(false);
-      setDownloadType(null);
     }
   };
 
-  // Update the swipe handlers
+  // Very simple navigation functions
+  const goNext = () => {
+    if (!photos || !currentPhoto) return;
+
+    const currentIndex = photos.findIndex((p) => p.id === currentPhoto.id);
+    if (currentIndex === -1) return;
+
+    const nextIndex = (currentIndex + 1) % photos.length;
+    const nextPhoto = photos[nextIndex];
+
+    // Always move left when going next
+    setDirection("left");
+    setCurrentPhoto(nextPhoto!);
+    openPhoto(nextPhoto!);
+  };
+
+  const goPrev = () => {
+    if (!photos || !currentPhoto) return;
+
+    const currentIndex = photos.findIndex((p) => p.id === currentPhoto.id);
+    if (currentIndex === -1) return;
+
+    const prevIndex = (currentIndex - 1 + photos.length) % photos.length;
+    const prevPhoto = photos[prevIndex];
+
+    // Always move right when going prev
+    setDirection("right");
+    setCurrentPhoto(prevPhoto!);
+    openPhoto(prevPhoto!);
+  };
+
+  // Update swipe handlers
   const swipeHandlers = useSwipeable({
-    onSwipedLeft: () => {
-      if (!photos || !selectedPhoto) return;
-      const currentIndex = photos.findIndex((p) => p.id === selectedPhoto.id);
-      const nextIndex = (currentIndex + 1) % photos.length;
-      openPhoto(photos[nextIndex]!);
-    },
-    onSwipedRight: () => {
-      if (!photos || !selectedPhoto) return;
-      const currentIndex = photos.findIndex((p) => p.id === selectedPhoto.id);
-      const prevIndex = (currentIndex - 1 + photos.length) % photos.length;
-      openPhoto(photos[prevIndex]!);
-    },
-    preventScrollOnSwipe: true, // Use this instead of preventDefaultTouchmoveEvent
+    onSwipedLeft: goNext,
+    onSwipedRight: goPrev,
+    preventScrollOnSwipe: true,
     trackMouse: false,
     delta: 10,
   });
+
+  // Update keyboard navigation
+  useEffect(() => {
+    if (!currentPhoto) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "ArrowRight") {
+        goNext();
+      } else if (e.key === "ArrowLeft") {
+        goPrev();
+      } else if (e.key === "Escape") {
+        closePhoto();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [currentPhoto, closePhoto]);
 
   // Update the hint effect to only show once
   useEffect(() => {
@@ -423,7 +399,7 @@ export default function EventPhotosPage() {
 
         {/* Photo controls section with download buttons side-by-side */}
         <div className="mb-6">
-          <div className="grid grid-cols-2 gap-2 sm:max-w-sm">
+          <div className="max-w-sm">
             <Button
               variant="default"
               size="sm"
@@ -431,31 +407,12 @@ export default function EventPhotosPage() {
               disabled={isDownloading}
               className="flex h-10 items-center justify-center gap-1.5"
             >
-              {isDownloading && downloadType === "all" ? (
+              {isDownloading ? (
                 <Loader2 className="mr-1 h-4 w-4 animate-spin" />
               ) : (
                 <Download className="mr-1 h-4 w-4" />
               )}
               <span className="text-sm">Download All</span>
-            </Button>
-
-            <Button
-              variant={selectedPhotos.size > 0 ? "default" : "outline"}
-              size="sm"
-              onClick={handleDownloadSelected}
-              disabled={selectedPhotos.size === 0 || isDownloading}
-              className="flex h-10 items-center justify-center gap-1.5"
-            >
-              {isDownloading && downloadType === "selected" ? (
-                <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-              ) : (
-                <Download className="mr-1 h-4 w-4" />
-              )}
-              <span className="text-sm">
-                {selectedPhotos.size > 0
-                  ? `Selected (${selectedPhotos.size})`
-                  : "Select to Download"}
-              </span>
             </Button>
           </div>
         </div>
@@ -469,17 +426,6 @@ export default function EventPhotosPage() {
             onClick={() => openPhoto(photo)}
             className="group relative aspect-square w-full cursor-pointer overflow-hidden rounded-md"
           >
-            <div className="absolute left-2 top-2 z-10">
-              <Checkbox
-                checked={selectedPhotos.has(photo.id)}
-                onCheckedChange={() => {
-                  togglePhotoSelection(photo.id);
-                }}
-                onClick={(e) => e.stopPropagation()}
-                className="h-5 w-5 rounded-sm border-2 border-white bg-black/20 ring-offset-0 focus:ring-0 data-[state=checked]:bg-primary"
-              />
-            </div>
-
             <Image
               src={photo.urls.thumbnail}
               alt={`Photo ${photo.id}`}
@@ -527,9 +473,12 @@ export default function EventPhotosPage() {
 
       {/* Photo Viewer Modal */}
       <Dialog
-        open={selectedPhoto !== null}
+        open={currentPhoto !== null}
         onOpenChange={(open) => {
-          if (!open) closePhoto();
+          if (!open) {
+            closePhoto();
+            setCurrentPhoto(null);
+          }
         }}
       >
         <DialogContent className="max-w-5xl overflow-hidden border-none bg-black/90 p-0 sm:max-w-[90vw]">
@@ -538,12 +487,12 @@ export default function EventPhotosPage() {
             <div className="absolute left-0 right-0 top-0 z-10 flex items-center justify-between bg-gradient-to-b from-black/80 to-transparent p-4">
               <DialogTitle className="text-white">{event?.name}</DialogTitle>
               <div className="flex gap-2">
-                {isOrganizer && selectedPhoto && (
+                {isOrganizer && currentPhoto && (
                   <Button
                     variant="ghost"
                     size="icon"
                     className="h-8 w-8 rounded-full text-white hover:bg-white/20"
-                    onClick={() => setPhotoToDelete(selectedPhoto)}
+                    onClick={() => setPhotoToDelete(currentPhoto)}
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
@@ -554,7 +503,7 @@ export default function EventPhotosPage() {
                   size="icon"
                   className="h-8 w-8 rounded-full text-white hover:bg-white/20"
                   onClick={() =>
-                    selectedPhoto && void handleDownloadSingle(selectedPhoto)
+                    currentPhoto && void handleDownloadSingle(currentPhoto)
                   }
                 >
                   <Download className="h-4 w-4" />
@@ -564,7 +513,7 @@ export default function EventPhotosPage() {
                   variant="ghost"
                   size="icon"
                   className="h-8 w-8 rounded-full text-white hover:bg-white/20"
-                  onClick={() => selectedPhoto && sharePhoto(selectedPhoto)}
+                  onClick={() => currentPhoto && sharePhoto(currentPhoto)}
                 >
                   <Share2 className="h-4 w-4" />
                 </Button>
@@ -580,45 +529,52 @@ export default function EventPhotosPage() {
               </div>
             </div>
 
-            {/* Main Image with Swipe Support */}
-            <div className="flex h-full items-center justify-center">
-              {selectedPhoto && (
-                <div className="flex h-full max-h-[calc(90vh-120px)] w-full items-center justify-center p-6">
-                  <div
-                    {...swipeHandlers}
-                    className="flex h-full w-full items-center justify-center"
-                  >
-                    <Image
-                      src={selectedPhoto.urls.medium}
-                      alt={`Photo ${selectedPhoto.id}`}
-                      className="max-h-full max-w-full rounded-md object-contain"
-                      width={1200}
-                      height={900}
-                      unoptimized
-                      priority
-                    />
-
-                    {/* Swipe hint overlay */}
-                    {showSwipeHint && (
-                      <div className="absolute inset-0 flex items-center justify-center bg-black/50 md:hidden">
-                        <div className="px-6 py-4 text-center text-white">
-                          <p>Swipe to navigate between photos</p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
+            {/* Main Image with proper navigation */}
+            <div className="flex h-full items-center justify-center overflow-hidden">
+              <div className="relative h-full max-h-[calc(90vh-120px)] w-full">
+                <div
+                  {...swipeHandlers}
+                  className="absolute inset-0 overflow-hidden"
+                >
+                  {currentPhoto && (
+                    <>
+                      <motion.div
+                        key={currentPhoto.id}
+                        initial={
+                          direction
+                            ? {
+                                x: direction === "left" ? "100%" : "-100%",
+                              }
+                            : { opacity: 1 }
+                        }
+                        animate={{ x: 0, opacity: 1 }}
+                        transition={{ duration: 0.25, ease: "easeOut" }}
+                        className="absolute inset-0 flex items-center justify-center p-6"
+                      >
+                        <Image
+                          src={currentPhoto.urls.medium}
+                          alt={`Photo`}
+                          className="max-h-full max-w-full rounded-md object-contain"
+                          width={1200}
+                          height={900}
+                          unoptimized
+                          priority
+                        />
+                      </motion.div>
+                    </>
+                  )}
                 </div>
-              )}
+              </div>
             </div>
 
             {/* Bottom Navigation */}
             <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4">
               <div className="flex items-center justify-between">
                 <div className="text-sm text-white">
-                  {selectedPhoto && photos && (
+                  {currentPhoto && photos && (
                     <>
-                      {photos.findIndex((p) => p.id === selectedPhoto.id) + 1}{" "}
-                      of {photos.length}
+                      {photos.findIndex((p) => p.id === currentPhoto.id) + 1} of{" "}
+                      {photos.length}
                     </>
                   )}
                 </div>
@@ -628,15 +584,7 @@ export default function EventPhotosPage() {
                     variant="ghost"
                     size="sm"
                     className="text-white hover:bg-white/20"
-                    onClick={() => {
-                      if (!photos || !selectedPhoto) return;
-                      const currentIndex = photos.findIndex(
-                        (p) => p.id === selectedPhoto.id,
-                      );
-                      const prevIndex =
-                        (currentIndex - 1 + photos.length) % photos.length;
-                      openPhoto(photos[prevIndex]!);
-                    }}
+                    onClick={goPrev}
                   >
                     Previous
                   </Button>
@@ -645,14 +593,7 @@ export default function EventPhotosPage() {
                     variant="ghost"
                     size="sm"
                     className="text-white hover:bg-white/20"
-                    onClick={() => {
-                      if (!photos || !selectedPhoto) return;
-                      const currentIndex = photos.findIndex(
-                        (p) => p.id === selectedPhoto.id,
-                      );
-                      const nextIndex = (currentIndex + 1) % photos.length;
-                      openPhoto(photos[nextIndex]!);
-                    }}
+                    onClick={goNext}
                   >
                     Next
                   </Button>
