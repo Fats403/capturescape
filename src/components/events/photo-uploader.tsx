@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   Camera,
   Upload,
@@ -15,6 +15,7 @@ import Image from "next/image";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
+import * as Sentry from "@sentry/nextjs";
 
 interface PhotoUploaderProps {
   eventId: string;
@@ -50,19 +51,106 @@ const PhotoUploader = ({ eventId, className = "" }: PhotoUploaderProps) => {
   const { toast } = useToast();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => {
+    if (capturedImage) {
+      Sentry.addBreadcrumb({
+        category: "state",
+        message: "Photo captured and stored in state",
+        level: "info",
+        data: {
+          imageSize: capturedImage.length,
+          timestamp: new Date().toISOString(),
+        },
+      });
+    } else {
+      Sentry.addBreadcrumb({
+        category: "state",
+        message: "Photo state cleared",
+        level: "info",
+        timestamp: Date.now(),
+      });
+    }
+  }, [capturedImage]);
+
   const handleCapture = (event: React.ChangeEvent<HTMLInputElement>) => {
+    Sentry.addBreadcrumb({
+      category: "user",
+      message: "User initiated photo capture",
+      level: "info",
+    });
+
     const file = event.target.files?.[0];
-    if (!file) return;
+    if (!file) {
+      Sentry.addBreadcrumb({
+        category: "error",
+        message: "No file selected in photo capture",
+        level: "warning",
+      });
+      return;
+    }
+
+    Sentry.addBreadcrumb({
+      category: "info",
+      message: "Photo file selected",
+      level: "info",
+      data: {
+        fileName: file.name,
+        fileType: file.type,
+        fileSize: file.size,
+        lastModified: new Date(file.lastModified).toISOString(),
+      },
+    });
 
     const reader = new FileReader();
+
     reader.onload = (e) => {
-      setCapturedImage(e.target?.result as string);
+      Sentry.addBreadcrumb({
+        category: "process",
+        message: "FileReader loaded successfully",
+        level: "info",
+      });
+
+      try {
+        const imageData = e.target?.result as string;
+        Sentry.addBreadcrumb({
+          category: "info",
+          message: "About to set captured image in state",
+          data: { dataLength: imageData?.length },
+        });
+
+        setCapturedImage(imageData);
+      } catch (error) {
+        Sentry.captureException(error);
+        Sentry.addBreadcrumb({
+          category: "error",
+          message: "Error setting captured image",
+          level: "error",
+          data: { error: String(error) },
+        });
+      }
     };
+
+    reader.onerror = (error) => {
+      Sentry.captureException(error);
+      Sentry.addBreadcrumb({
+        category: "error",
+        message: "FileReader error",
+        level: "error",
+        data: { error: String(error) },
+      });
+    };
+
     reader.readAsDataURL(file);
   };
 
   const handleUpload = async () => {
     if (!capturedImage) return;
+
+    Sentry.addBreadcrumb({
+      category: "user",
+      message: "User initiated photo upload",
+      level: "info",
+    });
 
     try {
       const canvas = document.createElement("canvas");
@@ -108,11 +196,24 @@ const PhotoUploader = ({ eventId, className = "" }: PhotoUploaderProps) => {
       setCapturedImage(null);
       setSelectedFilter("none");
     } catch (error) {
+      Sentry.captureException(error);
+      Sentry.addBreadcrumb({
+        category: "error",
+        message: "Upload failed",
+        level: "error",
+        data: { error: String(error) },
+      });
       console.error("Upload failed:", error);
     }
   };
 
   const resetCapture = () => {
+    Sentry.addBreadcrumb({
+      category: "user",
+      message: "User reset photo capture",
+      level: "info",
+    });
+
     setCapturedImage(null);
     setSelectedFilter("none");
   };
