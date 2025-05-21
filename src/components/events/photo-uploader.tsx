@@ -136,7 +136,7 @@ const PhotoUploader = ({ eventId, className = "" }: PhotoUploaderProps) => {
         category: "error",
         message: "FileReader error",
         level: "error",
-        data: { error: String(error) },
+        data: { error: JSON.stringify(error) },
       });
     };
 

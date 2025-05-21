@@ -35,12 +35,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     if (user) {
       Sentry.setUser({
         id: user.uid,
-        email: user.email || undefined,
-        username: user.displayName || undefined,
+        email: user.email ?? undefined,
+        username: user.displayName ?? undefined,
       });
     } else if (user === null) {
       // Clear user data when logged out
       Sentry.setUser(null);
+      // TODO:  log the user out?
     }
   }, [user]);
 
