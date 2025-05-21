@@ -50,6 +50,7 @@ const PhotoUploader = ({ eventId, className = "" }: PhotoUploaderProps) => {
   const { isUploading, progress, uploadEventPhoto } = useImageUpload();
   const { toast } = useToast();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const prevImageRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (capturedImage) {
@@ -71,6 +72,24 @@ const PhotoUploader = ({ eventId, className = "" }: PhotoUploaderProps) => {
       });
     }
   }, [capturedImage]);
+
+  useEffect(() => {
+    if (prevImageRef.current && !capturedImage) {
+      Sentry.captureException(new Error("Photo disappeared from state"), {
+        tags: {
+          component: "PhotoUploader",
+          event: "image_disappeared",
+          eventId: eventId,
+        },
+        extra: {
+          previousImageSize: prevImageRef.current?.length || 0,
+          timestamp: new Date().toISOString(),
+        },
+      });
+    }
+
+    prevImageRef.current = capturedImage;
+  }, [capturedImage, eventId]);
 
   const handleCapture = (event: React.ChangeEvent<HTMLInputElement>) => {
     Sentry.addBreadcrumb({
@@ -119,6 +138,12 @@ const PhotoUploader = ({ eventId, className = "" }: PhotoUploaderProps) => {
         });
 
         setCapturedImage(imageData);
+
+        // Force an event capture to test Sentry
+        Sentry.captureMessage("Photo capture completed", {
+          level: "info",
+          tags: { component: "PhotoUploader", eventType: "test" },
+        });
       } catch (error) {
         Sentry.captureException(error);
         Sentry.addBreadcrumb({
