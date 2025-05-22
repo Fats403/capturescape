@@ -91,6 +91,65 @@ const PhotoUploader = ({ eventId, className = "" }: PhotoUploaderProps) => {
     prevImageRef.current = capturedImage;
   }, [capturedImage, eventId]);
 
+  const optimizeImage = async (base64Image: string): Promise<string> => {
+    try {
+      const img = new window.Image();
+
+      await new Promise((resolve, reject) => {
+        const timeout = setTimeout(
+          () => reject(new Error("Image load timeout")),
+          10000,
+        );
+        img.onload = () => {
+          clearTimeout(timeout);
+          resolve(undefined);
+        };
+        img.onerror = (e) => {
+          clearTimeout(timeout);
+          reject(e);
+        };
+        img.src = base64Image;
+      });
+
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+
+      const maxDimension = 1200;
+      let width = img.width;
+      let height = img.height;
+
+      if (width > maxDimension || height > maxDimension) {
+        if (width > height) {
+          height = Math.round(height * (maxDimension / width));
+          width = maxDimension;
+        } else {
+          width = Math.round(width * (maxDimension / height));
+          height = maxDimension;
+        }
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+      ctx?.drawImage(img, 0, 0, width, height);
+
+      const optimizedImage = canvas.toDataURL("image/jpeg", 0.8);
+
+      Sentry.captureMessage("Image optimized", {
+        level: "info",
+        extra: {
+          originalSize: Math.round(base64Image.length / 1024),
+          newSize: Math.round(optimizedImage.length / 1024),
+          reduction: `${Math.round((1 - optimizedImage.length / base64Image.length) * 100)}%`,
+        },
+      });
+
+      return optimizedImage;
+    } catch (error) {
+      Sentry.captureException(error);
+      return base64Image;
+    }
+  };
+
   const handleCapture = (event: React.ChangeEvent<HTMLInputElement>) => {
     Sentry.addBreadcrumb({
       category: "user",
@@ -122,36 +181,35 @@ const PhotoUploader = ({ eventId, className = "" }: PhotoUploaderProps) => {
 
     const reader = new FileReader();
 
-    reader.onload = (e) => {
-      Sentry.addBreadcrumb({
-        category: "process",
-        message: "FileReader loaded successfully",
-        level: "info",
-      });
-
+    reader.onload = async (e) => {
       try {
-        const imageData = e.target?.result as string;
-        Sentry.addBreadcrumb({
-          category: "info",
-          message: "About to set captured image in state",
-          data: { dataLength: imageData?.length },
+        const originalImage = e.target?.result as string;
+
+        Sentry.captureMessage("Image loaded from camera", {
+          level: "info",
+          extra: { originalSizeKB: Math.round(originalImage.length / 1024) },
         });
 
-        setCapturedImage(imageData);
+        const optimizedImage = await optimizeImage(originalImage);
 
-        // Force an event capture to test Sentry
-        Sentry.captureMessage("Photo capture completed", {
+        try {
+          localStorage.setItem("capturedImageBackup", optimizedImage);
+          Sentry.addBreadcrumb({
+            category: "backup",
+            message: "Image saved to local storage backup",
+            level: "info",
+          });
+        } catch (storageError) {
+          Sentry.captureException(storageError);
+        }
+
+        setCapturedImage(optimizedImage);
+
+        Sentry.captureMessage("Optimized image set in state", {
           level: "info",
-          tags: { component: "PhotoUploader", eventType: "test" },
         });
       } catch (error) {
         Sentry.captureException(error);
-        Sentry.addBreadcrumb({
-          category: "error",
-          message: "Error setting captured image",
-          level: "error",
-          data: { error: String(error) },
-        });
       }
     };
 
@@ -255,6 +313,48 @@ const PhotoUploader = ({ eventId, className = "" }: PhotoUploaderProps) => {
       container.scrollBy({ left: scrollAmount, behavior: "smooth" });
     }
   };
+
+  useEffect(() => {
+    if (!capturedImage) {
+      const backupImage = localStorage.getItem("capturedImageBackup");
+
+      if (backupImage) {
+        Sentry.captureMessage("Attempting to recover image from backup", {
+          level: "info",
+        });
+
+        const timerId = setTimeout(() => {
+          setCapturedImage(backupImage);
+
+          Sentry.captureMessage("Image recovered from backup", {
+            level: "info",
+          });
+        }, 100);
+
+        return () => clearTimeout(timerId);
+      }
+    } else {
+      const timerId = setTimeout(() => {
+        localStorage.removeItem("capturedImageBackup");
+      }, 5000);
+
+      return () => clearTimeout(timerId);
+    }
+  }, [capturedImage]);
+
+  useEffect(() => {
+    Sentry.captureMessage("PhotoUploader component mounted", {
+      level: "info",
+      tags: { component: "PhotoUploader" },
+    });
+
+    return () => {
+      Sentry.captureMessage("PhotoUploader component unmounting", {
+        level: "warning",
+        tags: { component: "PhotoUploader" },
+      });
+    };
+  }, []);
 
   if (capturedImage) {
     return (
