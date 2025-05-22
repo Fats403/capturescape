@@ -274,7 +274,7 @@ const PhotoUploader = ({ eventId, className = "" }: PhotoUploaderProps) => {
 
       await clearLastUploadedPhoto();
 
-      utils.photo.getUserLastUploadedPhoto.invalidate();
+      void utils.photo.getUserLastUploadedPhoto.invalidate();
 
       setCapturedImage(null);
       setSelectedFilter("none");
@@ -303,7 +303,7 @@ const PhotoUploader = ({ eventId, className = "" }: PhotoUploaderProps) => {
 
     if (user?.uid) {
       await clearLastUploadedPhoto();
-      utils.photo.getUserLastUploadedPhoto.invalidate();
+      void utils.photo.getUserLastUploadedPhoto.invalidate();
     }
   };
 
@@ -347,7 +347,7 @@ const PhotoUploader = ({ eventId, className = "" }: PhotoUploaderProps) => {
   }, [capturedImage, utils.photo.getUserLastUploadedPhoto]);
 
   useEffect(() => {
-    utils.photo.getUserLastUploadedPhoto.invalidate();
+    void utils.photo.getUserLastUploadedPhoto.invalidate();
   }, [utils.photo.getUserLastUploadedPhoto]);
 
   useEffect(() => {
