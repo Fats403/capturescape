@@ -96,18 +96,8 @@ const PhotoUploader = ({ eventId, className = "" }: PhotoUploaderProps) => {
       const img = new window.Image();
 
       await new Promise((resolve, reject) => {
-        const timeout = setTimeout(
-          () => reject(new Error("Image load timeout")),
-          10000,
-        );
-        img.onload = () => {
-          clearTimeout(timeout);
-          resolve(undefined);
-        };
-        img.onerror = (e) => {
-          clearTimeout(timeout);
-          reject(e);
-        };
+        img.onload = resolve;
+        img.onerror = reject;
         img.src = base64Image;
       });
 
