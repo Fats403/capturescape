@@ -8,6 +8,7 @@ import {
   Loader2,
   ChevronLeft,
   ChevronRight,
+  LoaderCircle,
 } from "lucide-react";
 import { useImageUpload } from "@/hooks/use-image-upload";
 import { Button } from "@/components/ui/button";
@@ -16,6 +17,10 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 import * as Sentry from "@sentry/nextjs";
+import { ref, uploadString } from "firebase/storage";
+import { storage } from "@/lib/firebase";
+import { api } from "@/trpc/react";
+import { Skeleton } from "../ui/skeleton";
 
 interface PhotoUploaderProps {
   eventId: string;
@@ -51,6 +56,12 @@ const PhotoUploader = ({ eventId, className = "" }: PhotoUploaderProps) => {
   const { toast } = useToast();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const prevImageRef = useRef<string | null>(null);
+  const [isImageLoading, setIsImageLoading] = useState(false);
+  const [isLoadingLastPhoto, setIsLoadingLastPhoto] = useState(true);
+
+  const { mutateAsync: clearLastPhoto } =
+    api.photo.clearUserLastUploadedPhoto.useMutation();
+  const utils = api.useUtils();
 
   useEffect(() => {
     if (capturedImage) {
@@ -104,7 +115,7 @@ const PhotoUploader = ({ eventId, className = "" }: PhotoUploaderProps) => {
       const canvas = document.createElement("canvas");
       const ctx = canvas.getContext("2d");
 
-      const maxDimension = 1200;
+      const maxDimension = 1600;
       let width = img.width;
       let height = img.height;
 
@@ -122,7 +133,7 @@ const PhotoUploader = ({ eventId, className = "" }: PhotoUploaderProps) => {
       canvas.height = height;
       ctx?.drawImage(img, 0, 0, width, height);
 
-      const optimizedImage = canvas.toDataURL("image/jpeg", 0.8);
+      const optimizedImage = canvas.toDataURL("image/jpeg", 0.87);
 
       Sentry.captureMessage("Image optimized", {
         level: "info",
@@ -140,66 +151,74 @@ const PhotoUploader = ({ eventId, className = "" }: PhotoUploaderProps) => {
     }
   };
 
-  const handleCapture = (event: React.ChangeEvent<HTMLInputElement>) => {
-    Sentry.addBreadcrumb({
-      category: "user",
-      message: "User initiated photo capture",
-      level: "info",
-    });
-
-    const file = event.target.files?.[0];
-    if (!file) {
-      Sentry.addBreadcrumb({
-        category: "error",
-        message: "No file selected in photo capture",
-        level: "warning",
-      });
+  const saveLastUploadedPhoto = async (imageData: string): Promise<void> => {
+    if (!user?.uid) {
+      Sentry.captureMessage(
+        "Cannot save last uploaded photo - user not authenticated",
+        { level: "warning" },
+      );
       return;
     }
 
-    Sentry.addBreadcrumb({
-      category: "info",
-      message: "Photo file selected",
-      level: "info",
-      data: {
-        fileName: file.name,
-        fileType: file.type,
-        fileSize: file.size,
-        lastModified: new Date(file.lastModified).toISOString(),
-      },
-    });
+    try {
+      const storagePath = `users/${user.uid}/last-uploaded/photo.jpg`;
+      const storageRef = ref(storage, storagePath);
+
+      Sentry.addBreadcrumb({
+        category: "storage",
+        message: "Saving last uploaded photo to Firebase",
+        level: "info",
+        data: { path: storagePath },
+      });
+
+      await uploadString(storageRef, imageData, "data_url");
+
+      Sentry.captureMessage("Last uploaded photo saved", {
+        level: "info",
+      });
+    } catch (error) {
+      Sentry.captureException(error);
+    }
+  };
+
+  const clearLastUploadedPhoto = async (): Promise<void> => {
+    try {
+      await clearLastPhoto();
+
+      Sentry.addBreadcrumb({
+        category: "storage",
+        message: "Last uploaded photo cleared via API",
+        level: "info",
+      });
+    } catch (error) {
+      Sentry.captureException(error);
+    }
+  };
+
+  const handleCapture = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setIsImageLoading(true);
 
     const reader = new FileReader();
-
     reader.onload = async (e) => {
       try {
         const originalImage = e.target?.result as string;
 
-        Sentry.captureMessage("Image loaded from camera", {
-          level: "info",
-          extra: { originalSizeKB: Math.round(originalImage.length / 1024) },
-        });
-
         const optimizedImage = await optimizeImage(originalImage);
-
-        try {
-          localStorage.setItem("capturedImageBackup", optimizedImage);
-          Sentry.addBreadcrumb({
-            category: "backup",
-            message: "Image saved to local storage backup",
-            level: "info",
-          });
-        } catch (storageError) {
-          Sentry.captureException(storageError);
-        }
+        await saveLastUploadedPhoto(optimizedImage);
 
         setCapturedImage(optimizedImage);
-
-        Sentry.captureMessage("Optimized image set in state", {
-          level: "info",
-        });
       } catch (error) {
         Sentry.captureException(error);
+        toast({
+          title: "Failed to process photo",
+          description: "Please try again",
+          variant: "destructive",
+        });
+      } finally {
+        setIsImageLoading(false);
       }
     };
 
@@ -218,12 +237,6 @@ const PhotoUploader = ({ eventId, className = "" }: PhotoUploaderProps) => {
 
   const handleUpload = async () => {
     if (!capturedImage) return;
-
-    Sentry.addBreadcrumb({
-      category: "user",
-      message: "User initiated photo upload",
-      level: "info",
-    });
 
     try {
       const canvas = document.createElement("canvas");
@@ -253,11 +266,18 @@ const PhotoUploader = ({ eventId, className = "" }: PhotoUploaderProps) => {
       }
 
       const blob = await new Promise<Blob>((resolve) =>
-        canvas.toBlob((blob) => resolve(blob!), "image/jpeg", 0.9),
+        canvas.toBlob((blob) => resolve(blob!), "image/jpeg", 0.87),
       );
 
       const file = new File([blob], "photo.jpg", { type: "image/jpeg" });
       await uploadEventPhoto(file, eventId, user?.uid);
+
+      await clearLastUploadedPhoto();
+
+      utils.photo.getUserLastUploadedPhoto.invalidate();
+
+      setCapturedImage(null);
+      setSelectedFilter("none");
 
       toast({
         position: "top",
@@ -265,9 +285,6 @@ const PhotoUploader = ({ eventId, className = "" }: PhotoUploaderProps) => {
         description: "Your photo will show up in the gallery feed!",
         variant: "success",
       });
-
-      setCapturedImage(null);
-      setSelectedFilter("none");
     } catch (error) {
       Sentry.captureException(error);
       Sentry.addBreadcrumb({
@@ -280,15 +297,14 @@ const PhotoUploader = ({ eventId, className = "" }: PhotoUploaderProps) => {
     }
   };
 
-  const resetCapture = () => {
-    Sentry.addBreadcrumb({
-      category: "user",
-      message: "User reset photo capture",
-      level: "info",
-    });
-
+  const resetCapture = async () => {
     setCapturedImage(null);
     setSelectedFilter("none");
+
+    if (user?.uid) {
+      await clearLastUploadedPhoto();
+      utils.photo.getUserLastUploadedPhoto.invalidate();
+    }
   };
 
   const scrollFilters = (direction: "left" | "right") => {
@@ -305,32 +321,34 @@ const PhotoUploader = ({ eventId, className = "" }: PhotoUploaderProps) => {
   };
 
   useEffect(() => {
-    if (!capturedImage) {
-      const backupImage = localStorage.getItem("capturedImageBackup");
+    const fetchLastPhoto = async () => {
+      if (!capturedImage) {
+        setIsLoadingLastPhoto(true);
+        try {
+          const result = await utils.photo.getUserLastUploadedPhoto.fetch(
+            undefined,
+            { staleTime: 0 },
+          );
 
-      if (backupImage) {
-        Sentry.captureMessage("Attempting to recover image from backup", {
-          level: "info",
-        });
-
-        const timerId = setTimeout(() => {
-          setCapturedImage(backupImage);
-
-          Sentry.captureMessage("Image recovered from backup", {
-            level: "info",
-          });
-        }, 100);
-
-        return () => clearTimeout(timerId);
+          if (result.imageData) {
+            setCapturedImage(result.imageData);
+          }
+        } catch (error) {
+          Sentry.captureException(error);
+        } finally {
+          setIsLoadingLastPhoto(false);
+        }
+      } else {
+        setIsLoadingLastPhoto(false);
       }
-    } else {
-      const timerId = setTimeout(() => {
-        localStorage.removeItem("capturedImageBackup");
-      }, 5000);
+    };
 
-      return () => clearTimeout(timerId);
-    }
-  }, [capturedImage]);
+    void fetchLastPhoto();
+  }, [capturedImage, utils.photo.getUserLastUploadedPhoto]);
+
+  useEffect(() => {
+    utils.photo.getUserLastUploadedPhoto.invalidate();
+  }, [utils.photo.getUserLastUploadedPhoto]);
 
   useEffect(() => {
     Sentry.captureMessage("PhotoUploader component mounted", {
@@ -346,19 +364,37 @@ const PhotoUploader = ({ eventId, className = "" }: PhotoUploaderProps) => {
     };
   }, []);
 
-  if (capturedImage) {
+  if (isLoadingLastPhoto) {
+    return (
+      <div className="flex h-full w-full items-center justify-center">
+        <LoaderCircle className="h-10 w-10 animate-spin text-primary" />
+      </div>
+    );
+  } else if (isImageLoading || capturedImage) {
     return (
       <div className="flex h-full w-full flex-col items-center justify-between px-2 py-6 sm:py-8">
         <div className="relative max-h-[60vh] w-full max-w-md overflow-hidden rounded-xl bg-muted/70 shadow-lg sm:max-w-lg md:max-w-xl">
-          <div className="aspect-[4/3] w-full">
-            <Image
-              src={capturedImage}
-              alt="Captured"
-              fill
-              className="object-contain"
-              style={{ filter: FILTERS[selectedFilter] }}
-              unoptimized
-            />
+          <div className="relative aspect-[4/3] w-full">
+            {isImageLoading ? (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <Skeleton className="h-full w-full" />
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                  <LoaderCircle className="h-10 w-10 animate-spin text-primary/70" />
+                  <p className="mt-2 text-sm font-medium text-primary/70">
+                    Processing photo...
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <Image
+                src={capturedImage!}
+                alt="Captured"
+                fill
+                className="object-contain"
+                style={{ filter: FILTERS[selectedFilter] }}
+                unoptimized
+              />
+            )}
           </div>
         </div>
 
@@ -379,15 +415,25 @@ const PhotoUploader = ({ eventId, className = "" }: PhotoUploaderProps) => {
                 className="scrollbar-hide flex gap-3 overflow-x-auto py-2 pl-3 pr-3"
                 style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
               >
-                {(Object.keys(FILTERS) as FilterType[]).map((filter) => (
-                  <FilterPreview
-                    key={filter}
-                    filter={filter}
-                    isSelected={selectedFilter === filter}
-                    onClick={() => setSelectedFilter(filter)}
-                    image={capturedImage}
-                  />
-                ))}
+                {(Object.keys(FILTERS) as FilterType[]).map((filter) =>
+                  isImageLoading ? (
+                    <div
+                      key={filter}
+                      className="flex flex-col items-center space-y-1"
+                    >
+                      <Skeleton className="h-16 w-16 rounded-md" />
+                      <Skeleton className="h-4 w-12" />
+                    </div>
+                  ) : (
+                    <FilterPreview
+                      key={filter}
+                      filter={filter}
+                      isSelected={selectedFilter === filter}
+                      onClick={() => setSelectedFilter(filter)}
+                      image={capturedImage!}
+                    />
+                  ),
+                )}
               </div>
             </div>
 
@@ -407,7 +453,7 @@ const PhotoUploader = ({ eventId, className = "" }: PhotoUploaderProps) => {
             variant="outline"
             onClick={resetCapture}
             className="h-12 flex-1 text-base font-medium"
-            disabled={isUploading}
+            disabled={isUploading || isImageLoading}
           >
             <RefreshCcw className="mr-2 h-4 w-4 sm:mr-2.5 sm:h-5 sm:w-5" />
             Retake
@@ -415,9 +461,9 @@ const PhotoUploader = ({ eventId, className = "" }: PhotoUploaderProps) => {
           <Button
             onClick={handleUpload}
             className="h-12 flex-1 bg-primary text-base font-medium hover:bg-primary/90"
-            disabled={isUploading}
+            disabled={isUploading || isImageLoading || !capturedImage}
           >
-            {isUploading ? (
+            {isImageLoading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin sm:mr-2.5 sm:h-5 sm:w-5" />
                 {Math.round(progress)}%
@@ -432,42 +478,43 @@ const PhotoUploader = ({ eventId, className = "" }: PhotoUploaderProps) => {
         </div>
       </div>
     );
+  } else {
+    return (
+      <div className="flex h-full w-full flex-col items-center justify-center p-6">
+        <div className="max-w-md text-center">
+          <h2 className="text-2xl font-semibold sm:text-3xl">Take a Photo</h2>
+        </div>
+
+        <div className="mt-10 flex flex-col items-center">
+          <label
+            className={cn(
+              "relative flex aspect-square w-36 cursor-pointer flex-col items-center justify-center rounded-full border-2 border-dashed border-primary/30 bg-primary/5 text-primary transition-all hover:bg-primary/10 sm:w-44 md:w-48",
+              className,
+            )}
+          >
+            <div className="absolute inset-0 animate-pulse rounded-full bg-primary/10"></div>
+
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              onChange={handleCapture}
+              className="hidden"
+              disabled={isLoadingLastPhoto}
+            />
+            <Camera className="relative z-10 mb-2 h-10 w-10 text-primary sm:h-12 sm:w-12" />
+            <span className="relative z-10 text-sm font-medium text-primary sm:text-base">
+              Tap to capture
+            </span>
+          </label>
+
+          <p className="mt-6 max-w-xs text-center text-sm text-muted-foreground">
+            Your photos will be shared with everyone attending this event
+          </p>
+        </div>
+      </div>
+    );
   }
-
-  return (
-    <div className="flex h-full w-full flex-col items-center justify-center p-6">
-      <div className="max-w-md text-center">
-        <h2 className="text-2xl font-semibold sm:text-3xl">Take a Photo</h2>
-      </div>
-
-      <div className="mt-10 flex flex-col items-center">
-        <label
-          className={cn(
-            "relative flex aspect-square w-36 cursor-pointer flex-col items-center justify-center rounded-full border-2 border-dashed border-primary/30 bg-primary/5 text-primary transition-all hover:bg-primary/10 sm:w-44 md:w-48",
-            className,
-          )}
-        >
-          <div className="absolute inset-0 animate-pulse rounded-full bg-primary/10"></div>
-
-          <input
-            type="file"
-            accept="image/*"
-            capture="environment"
-            onChange={handleCapture}
-            className="hidden"
-          />
-          <Camera className="relative z-10 mb-2 h-10 w-10 text-primary sm:h-12 sm:w-12" />
-          <span className="relative z-10 text-sm font-medium text-primary sm:text-base">
-            Tap to capture
-          </span>
-        </label>
-
-        <p className="mt-6 max-w-xs text-center text-sm text-muted-foreground">
-          Your photos will be shared with everyone attending this event
-        </p>
-      </div>
-    </div>
-  );
 };
 
 interface FilterPreviewProps {
@@ -503,7 +550,7 @@ const FilterPreview = ({
         <div
           className="absolute inset-0 bg-cover bg-center"
           style={{
-            backgroundImage: `url(${image})`,
+            backgroundImage: image ? `url(${image})` : "none",
             filter: FILTERS[filter],
           }}
         />

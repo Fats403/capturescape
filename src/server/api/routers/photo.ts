@@ -4,6 +4,7 @@ import { db } from "@/lib/firebase-admin";
 import { TRPCError } from "@trpc/server";
 import { type Photo } from "@/lib/types/event";
 import { FieldValue } from "firebase-admin/firestore";
+import { adminStorage } from "@/lib/firebase-admin";
 
 const PHOTOS_PER_PAGE = 8;
 
@@ -234,4 +235,71 @@ export const photoRouter = createTRPCRouter({
 
       return { success: true };
     }),
+
+  getUserLastUploadedPhoto: protectedProcedure.query(async ({ ctx }) => {
+    const userId = ctx.user.uid;
+
+    try {
+      // Define the storage path
+      const storagePath = `users/${userId}/last-uploaded/photo.jpg`;
+
+      // Check if the file exists
+      try {
+        const [fileExists] = await adminStorage
+          .bucket()
+          .file(storagePath)
+          .exists();
+
+        if (!fileExists) {
+          return { imageData: null };
+        }
+
+        // Get the file content
+        const [fileContents] = await adminStorage
+          .bucket()
+          .file(storagePath)
+          .download();
+
+        // Convert to base64
+        const base64 = `data:image/jpeg;base64,${fileContents.toString("base64")}`;
+
+        return { imageData: base64 };
+      } catch (error) {
+        // File doesn't exist or can't be accessed
+        return { imageData: null };
+      }
+    } catch (error) {
+      throw new TRPCError({
+        code: "INTERNAL_SERVER_ERROR",
+        message: "Failed to fetch last uploaded photo",
+        cause: error,
+      });
+    }
+  }),
+
+  clearUserLastUploadedPhoto: protectedProcedure.mutation(async ({ ctx }) => {
+    const userId = ctx.user.uid;
+
+    try {
+      const storagePath = `users/${userId}/last-uploaded/photo.jpg`;
+
+      // Check if file exists before attempting to delete
+      const [fileExists] = await adminStorage
+        .bucket()
+        .file(storagePath)
+        .exists();
+
+      if (fileExists) {
+        await adminStorage.bucket().file(storagePath).delete();
+      }
+
+      return { success: true };
+    } catch (error) {
+      throw new TRPCError({
+        code: "INTERNAL_SERVER_ERROR",
+        message: "Failed to clear last uploaded photo",
+        cause: error,
+      });
+    }
+  }),
 });
