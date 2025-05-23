@@ -617,7 +617,7 @@ const PricingSection = () => {
             Choose the plan that fits your event size and needs
           </motion.p>
         </div>
-        <div className="flex w-full flex-col items-center justify-center gap-16 px-4 md:flex-row">
+        <div className="mx-4 flex w-full flex-col items-center justify-center gap-16 md:flex-row">
           {plans.map((plan, index) => (
             <motion.div
               key={index}

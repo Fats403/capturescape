@@ -45,7 +45,7 @@ export default function LoginPage() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6 }}
-        className="relative z-10 w-full max-w-md rounded-2xl border-2 border-gray-100 bg-white p-8 px-4 shadow-xl dark:border-gray-800 dark:bg-gray-900"
+        className="relative z-10 mx-4 w-full max-w-md rounded-2xl border-2 border-gray-100 bg-white p-8 shadow-xl dark:border-gray-800 dark:bg-gray-900"
       >
         <div className="mb-8 flex items-center justify-center gap-3">
           <div className="relative">
