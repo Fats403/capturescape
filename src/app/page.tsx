@@ -492,7 +492,7 @@ const TestimonialsSection = () => {
       image: "ER",
       content:
         "Setting up was incredibly easy! The QR code made it simple for all our guests to join and share memories from my daughter's sweet 16.",
-      rating: 5,
+      rating: 4,
     },
   ];
 
@@ -526,7 +526,7 @@ const TestimonialsSection = () => {
               className="rounded-2xl border border-gray-100 bg-gradient-to-br from-white to-gray-50 p-8 shadow-lg dark:border-gray-700 dark:from-gray-900 dark:to-gray-800"
             >
               <div className="mb-4 flex items-center">
-                {[...Array(testimonial.rating)].map((_, i) => (
+                {Array.from({ length: testimonial.rating }, (_, i) => (
                   <Star
                     key={i}
                     className="size-5 fill-current text-yellow-400"
@@ -534,7 +534,7 @@ const TestimonialsSection = () => {
                 ))}
               </div>
               <p className="mb-6 italic leading-relaxed text-gray-700 dark:text-gray-300">
-                "{testimonial.content}"
+                &quot;{testimonial.content}&quot;
               </p>
               <div className="flex items-center">
                 <div className="mr-4 flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-r from-blue-500 to-purple-500 font-bold text-white">
@@ -702,7 +702,7 @@ const AboutSection = () => {
               <p>
                 CaptureScape was born from a simple frustration: why is it so
                 hard to share photos from events with everyone who was there?
-                We've all been to weddings, parties, and gatherings where
+                We&apos;ve all been to weddings, parties, and gatherings where
                 amazing photos were taken, but they ended up scattered across
                 different phones and social media accounts.
               </p>
