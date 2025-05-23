@@ -107,17 +107,17 @@ const HeroSection = () => {
       {/* Floating elements */}
       <div className="absolute inset-0 overflow-hidden">
         <motion.div
-          className="absolute left-20 top-40 h-20 w-20 rounded-full bg-gradient-to-r from-blue-400 to-purple-500 opacity-10"
+          className="absolute left-8 top-32 h-20 w-20 rounded-full bg-gradient-to-r from-blue-400 to-purple-500 opacity-10 md:top-40"
           animate={{ y: [0, -20, 0], rotate: [0, 180, 360] }}
           transition={{ duration: 6, repeat: Infinity }}
         />
         <motion.div
-          className="absolute right-20 top-60 h-16 w-16 rounded-full bg-gradient-to-r from-purple-400 to-pink-500 opacity-10"
+          className="absolute right-20 top-[355px] h-16 w-16 rounded-full bg-gradient-to-r from-purple-400 to-pink-500 opacity-10 md:top-60"
           animate={{ y: [0, 20, 0], rotate: [360, 180, 0] }}
           transition={{ duration: 8, repeat: Infinity }}
         />
         <motion.div
-          className="absolute bottom-40 left-40 h-12 w-12 rounded-full bg-gradient-to-r from-green-400 to-blue-500 opacity-10"
+          className="absolute bottom-40 left-10 h-12 w-12 rounded-full bg-gradient-to-r from-green-400 to-blue-500 opacity-10 md:left-40"
           animate={{ y: [0, -15, 0], x: [0, 10, 0] }}
           transition={{ duration: 5, repeat: Infinity }}
         />
@@ -135,7 +135,7 @@ const HeroSection = () => {
         </motion.div>
 
         <h1 className="mx-auto max-w-5xl text-4xl font-bold leading-tight text-slate-900 dark:text-slate-100 md:text-6xl lg:text-7xl">
-          {"Share event photos in".split(" ").map((word, index) => (
+          {"Share Your Event Photos".split(" ").map((word, index) => (
             <motion.span
               key={index}
               initial={{ opacity: 0, filter: "blur(4px)", y: 20 }}
@@ -160,7 +160,7 @@ const HeroSection = () => {
             }}
             className="inline-block bg-gradient-to-r from-blue-600 via-purple-600 to-blue-800 bg-clip-text text-transparent"
           >
-            real-time
+            In Realtime
           </motion.span>
         </h1>
 
@@ -199,7 +199,7 @@ const HeroSection = () => {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.4, delay: 1.2 }}
-          className="mt-12 flex items-center justify-center gap-8 text-sm text-gray-500"
+          className="mt-12 flex flex-col items-center justify-center gap-8 text-sm text-gray-500 md:flex-row"
         >
           <div className="flex items-center gap-2">
             <CheckCircle className="size-4 text-green-500" />
@@ -617,7 +617,7 @@ const PricingSection = () => {
             Choose the plan that fits your event size and needs
           </motion.p>
         </div>
-        <div className="flex w-full flex-col items-center justify-center gap-16 md:flex-row">
+        <div className="flex w-full flex-col items-center justify-center gap-16 px-4 md:flex-row">
           {plans.map((plan, index) => (
             <motion.div
               key={index}
@@ -802,8 +802,8 @@ const CTASection = () => {
           transition={{ duration: 0.6 }}
         >
           <h2 className="mb-8 text-4xl font-bold text-white md:text-6xl">
-            Ready to transform your
-            <span className="block bg-gradient-to-r from-yellow-300 to-orange-300 bg-clip-text text-transparent">
+            Ready to transform your{" "}
+            <span className="bg-gradient-to-r from-yellow-300 to-orange-300 bg-clip-text text-transparent">
               event photography?
             </span>
           </h2>
