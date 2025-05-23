@@ -41,40 +41,42 @@ export default function LoginPage() {
       </div>
 
       {/* Login container */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6 }}
-        className="relative z-10 mx-4 w-full max-w-md rounded-2xl border-2 border-gray-100 bg-white p-8 shadow-xl dark:border-gray-800 dark:bg-gray-900"
-      >
-        <div className="mb-8 flex items-center justify-center gap-3">
-          <div className="relative">
-            <Camera className="size-10 text-blue-500" />
-            <div className="absolute -right-1 -top-1 h-3 w-3 animate-pulse rounded-full bg-gradient-to-r from-blue-400 to-purple-500" />
+      <div className="mx-4">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6 }}
+          className="relative z-10 w-full max-w-md rounded-2xl border-2 border-gray-100 bg-white p-8 shadow-xl dark:border-gray-800 dark:bg-gray-900"
+        >
+          <div className="mb-8 flex items-center justify-center gap-3">
+            <div className="relative">
+              <Camera className="size-10 text-blue-500" />
+              <div className="absolute -right-1 -top-1 h-3 w-3 animate-pulse rounded-full bg-gradient-to-r from-blue-400 to-purple-500" />
+            </div>
+            <h1 className="bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-3xl font-bold text-transparent">
+              CaptureScape
+            </h1>
           </div>
-          <h1 className="bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-3xl font-bold text-transparent">
-            CaptureScape
-          </h1>
-        </div>
 
-        <div className="mb-8 text-center">
-          <h2 className="mb-3 text-2xl font-bold text-gray-900 dark:text-gray-100">
-            Welcome!
-          </h2>
-          <p className="text-gray-600 dark:text-gray-400">
-            Sign in to continue sharing memories
-          </p>
-        </div>
+          <div className="mb-8 text-center">
+            <h2 className="mb-3 text-2xl font-bold text-gray-900 dark:text-gray-100">
+              Welcome!
+            </h2>
+            <p className="text-gray-600 dark:text-gray-400">
+              Sign in to continue sharing memories
+            </p>
+          </div>
 
-        <div className="space-y-4">
-          <GoogleButton
-            onClick={signIn}
-            disabled={loading}
-            loading={loading}
-            className="w-full rounded-xl border border-gray-200 bg-white px-6 py-3 font-medium text-gray-700 transition-all duration-300 hover:border-blue-500 hover:shadow-lg dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
-          />
-        </div>
-      </motion.div>
+          <div className="space-y-4">
+            <GoogleButton
+              onClick={signIn}
+              disabled={loading}
+              loading={loading}
+              className="w-full rounded-xl border border-gray-200 bg-white px-6 py-3 font-medium text-gray-700 transition-all duration-300 hover:border-blue-500 hover:shadow-lg dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+            />
+          </div>
+        </motion.div>
+      </div>
     </div>
   );
 }

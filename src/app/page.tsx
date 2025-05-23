@@ -105,9 +105,9 @@ const HeroSection = () => {
       <motion.div className="absolute inset-0 top-4 mx-0 my-16 rounded-3xl bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 dark:from-blue-950/20 dark:via-indigo-950/20 dark:to-purple-950/20 md:mx-8" />
 
       {/* Floating elements */}
-      <div className="absolute inset-0 overflow-hidden">
+      <div className="absolute inset-0 hidden overflow-hidden md:block">
         <motion.div
-          className="absolute left-8 top-32 h-20 w-20 rounded-full bg-gradient-to-r from-blue-400 to-purple-500 opacity-10 md:top-40"
+          className="absolute left-8 top-32 h-20 w-20 rounded-full bg-gradient-to-r from-blue-400 to-purple-500 opacity-10 md:left-20 md:top-40"
           animate={{ y: [0, -20, 0], rotate: [0, 180, 360] }}
           transition={{ duration: 6, repeat: Infinity }}
         />
@@ -617,14 +617,14 @@ const PricingSection = () => {
             Choose the plan that fits your event size and needs
           </motion.p>
         </div>
-        <div className="mx-4 flex w-full flex-col items-center justify-center gap-16 md:flex-row">
+        <div className="flex w-full flex-col items-center justify-center gap-16 px-4 md:flex-row">
           {plans.map((plan, index) => (
             <motion.div
               key={index}
               initial={{ opacity: 0 }}
               whileInView={{ opacity: 1 }}
               transition={{ duration: 0.5 }}
-              className={`relative flex w-96 flex-col rounded-2xl border-2 bg-white p-8 shadow-lg transition-all duration-300 hover:shadow-2xl dark:bg-gray-900 ${
+              className={`relative flex w-80 flex-col rounded-2xl border-2 bg-white p-8 shadow-lg transition-all duration-300 hover:shadow-2xl dark:bg-gray-900 md:w-96 ${
                 plan.popular
                   ? "scale-105 border-blue-500 shadow-blue-500/20"
                   : "border-gray-200 hover:border-blue-300 dark:border-gray-700 dark:hover:border-blue-600"
