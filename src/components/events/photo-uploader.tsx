@@ -16,7 +16,6 @@ import Image from "next/image";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
-import * as Sentry from "@sentry/nextjs";
 import { ref, uploadString } from "firebase/storage";
 import { storage } from "@/lib/firebase";
 import { api } from "@/trpc/react";
@@ -55,52 +54,12 @@ const PhotoUploader = ({ eventId, className = "" }: PhotoUploaderProps) => {
   const { isUploading, progress, uploadEventPhoto } = useImageUpload();
   const { toast } = useToast();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const prevImageRef = useRef<string | null>(null);
   const [isImageLoading, setIsImageLoading] = useState(false);
   const [isLoadingLastPhoto, setIsLoadingLastPhoto] = useState(true);
 
   const { mutateAsync: clearLastPhoto } =
     api.photo.clearUserLastUploadedPhoto.useMutation();
   const utils = api.useUtils();
-
-  useEffect(() => {
-    if (capturedImage) {
-      Sentry.addBreadcrumb({
-        category: "state",
-        message: "Photo captured and stored in state",
-        level: "info",
-        data: {
-          imageSize: capturedImage.length,
-          timestamp: new Date().toISOString(),
-        },
-      });
-    } else {
-      Sentry.addBreadcrumb({
-        category: "state",
-        message: "Photo state cleared",
-        level: "info",
-        timestamp: Date.now(),
-      });
-    }
-  }, [capturedImage]);
-
-  useEffect(() => {
-    if (prevImageRef.current && !capturedImage) {
-      Sentry.captureException(new Error("Photo disappeared from state"), {
-        tags: {
-          component: "PhotoUploader",
-          event: "image_disappeared",
-          eventId: eventId,
-        },
-        extra: {
-          previousImageSize: prevImageRef.current?.length || 0,
-          timestamp: new Date().toISOString(),
-        },
-      });
-    }
-
-    prevImageRef.current = capturedImage;
-  }, [capturedImage, eventId]);
 
   const optimizeImage = async (base64Image: string): Promise<string> => {
     try {
@@ -134,64 +93,31 @@ const PhotoUploader = ({ eventId, className = "" }: PhotoUploaderProps) => {
       ctx?.drawImage(img, 0, 0, width, height);
 
       const optimizedImage = canvas.toDataURL("image/jpeg", 0.87);
-
-      Sentry.captureMessage("Image optimized", {
-        level: "info",
-        extra: {
-          originalSize: Math.round(base64Image.length / 1024),
-          newSize: Math.round(optimizedImage.length / 1024),
-          reduction: `${Math.round((1 - optimizedImage.length / base64Image.length) * 100)}%`,
-        },
-      });
-
       return optimizedImage;
     } catch (error) {
-      Sentry.captureException(error);
       return base64Image;
     }
   };
 
   const saveLastUploadedPhoto = async (imageData: string): Promise<void> => {
     if (!user?.uid) {
-      Sentry.captureMessage(
-        "Cannot save last uploaded photo - user not authenticated",
-        { level: "warning" },
-      );
       return;
     }
 
     try {
       const storagePath = `users/${user.uid}/last-uploaded/photo.jpg`;
       const storageRef = ref(storage, storagePath);
-
-      Sentry.addBreadcrumb({
-        category: "storage",
-        message: "Saving last uploaded photo to Firebase",
-        level: "info",
-        data: { path: storagePath },
-      });
-
       await uploadString(storageRef, imageData, "data_url");
-
-      Sentry.captureMessage("Last uploaded photo saved", {
-        level: "info",
-      });
     } catch (error) {
-      Sentry.captureException(error);
+      console.error("Error saving last uploaded photo:", error);
     }
   };
 
   const clearLastUploadedPhoto = async (): Promise<void> => {
     try {
       await clearLastPhoto();
-
-      Sentry.addBreadcrumb({
-        category: "storage",
-        message: "Last uploaded photo cleared via API",
-        level: "info",
-      });
     } catch (error) {
-      Sentry.captureException(error);
+      console.error("Error clearing last uploaded photo:", error);
     }
   };
 
@@ -211,7 +137,6 @@ const PhotoUploader = ({ eventId, className = "" }: PhotoUploaderProps) => {
 
         setCapturedImage(optimizedImage);
       } catch (error) {
-        Sentry.captureException(error);
         toast({
           title: "Failed to process photo",
           description: "Please try again",
@@ -223,13 +148,8 @@ const PhotoUploader = ({ eventId, className = "" }: PhotoUploaderProps) => {
     };
 
     reader.onerror = (error) => {
-      Sentry.captureException(error);
-      Sentry.addBreadcrumb({
-        category: "error",
-        message: "FileReader error",
-        level: "error",
-        data: { error: JSON.stringify(error) },
-      });
+      console.error("FileReader error:", error);
+      setIsImageLoading(false);
     };
 
     reader.readAsDataURL(file);
@@ -286,24 +206,28 @@ const PhotoUploader = ({ eventId, className = "" }: PhotoUploaderProps) => {
         variant: "success",
       });
     } catch (error) {
-      Sentry.captureException(error);
-      Sentry.addBreadcrumb({
-        category: "error",
-        message: "Upload failed",
-        level: "error",
-        data: { error: String(error) },
-      });
       console.error("Upload failed:", error);
     }
   };
 
   const resetCapture = async () => {
-    setCapturedImage(null);
-    setSelectedFilter("none");
+    setIsLoadingLastPhoto(true);
 
-    if (user?.uid) {
-      await clearLastUploadedPhoto();
-      void utils.photo.getUserLastUploadedPhoto.invalidate();
+    try {
+      if (user?.uid) {
+        await clearLastUploadedPhoto();
+
+        await utils.photo.getUserLastUploadedPhoto.invalidate();
+
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+
+      setCapturedImage(null);
+      setSelectedFilter("none");
+    } catch (error) {
+      console.error("Error resetting capture:", error);
+    } finally {
+      setIsLoadingLastPhoto(false);
     }
   };
 
@@ -334,7 +258,7 @@ const PhotoUploader = ({ eventId, className = "" }: PhotoUploaderProps) => {
             setCapturedImage(result.imageData);
           }
         } catch (error) {
-          Sentry.captureException(error);
+          console.error("Error fetching last photo:", error);
         } finally {
           setIsLoadingLastPhoto(false);
         }
@@ -349,20 +273,6 @@ const PhotoUploader = ({ eventId, className = "" }: PhotoUploaderProps) => {
   useEffect(() => {
     void utils.photo.getUserLastUploadedPhoto.invalidate();
   }, [utils.photo.getUserLastUploadedPhoto]);
-
-  useEffect(() => {
-    Sentry.captureMessage("PhotoUploader component mounted", {
-      level: "info",
-      tags: { component: "PhotoUploader" },
-    });
-
-    return () => {
-      Sentry.captureMessage("PhotoUploader component unmounting", {
-        level: "warning",
-        tags: { component: "PhotoUploader" },
-      });
-    };
-  }, []);
 
   if (isLoadingLastPhoto) {
     return (

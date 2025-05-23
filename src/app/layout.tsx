@@ -29,7 +29,7 @@ export default function RootLayout({
     <html lang="en" className={`${GeistSans.variable}`}>
       <body>
         <TRPCReactProvider>
-          <AuthProvider>{children} </AuthProvider>
+          <AuthProvider>{children}</AuthProvider>
         </TRPCReactProvider>
         <Toaster />
       </body>

@@ -1,22 +1,24 @@
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
-
+import { cn } from "@/lib/utils";
 interface GoogleButtonProps {
   onClick: () => Promise<void>;
   disabled: boolean;
   loading?: boolean;
+  className?: string;
 }
 
 export function GoogleButton({
   onClick,
   disabled,
   loading,
+  className,
 }: GoogleButtonProps) {
   return (
     <Button
       type="button"
       variant="outline"
-      className="w-full"
+      className={cn("w-full", className)}
       onClick={onClick}
       disabled={disabled}
     >
