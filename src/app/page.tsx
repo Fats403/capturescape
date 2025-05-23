@@ -101,9 +101,6 @@ const Navbar = () => {
 const HeroSection = () => {
   return (
     <div className="relative mx-auto flex max-w-7xl flex-col items-center justify-center px-4 py-24 md:py-40">
-      {/* Animated background elements */}
-      <motion.div className="absolute inset-0 top-4 mx-0 my-16 rounded-3xl bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 dark:from-blue-950/20 dark:via-indigo-950/20 dark:to-purple-950/20 md:mx-8" />
-
       {/* Floating elements */}
       <div className="absolute inset-0 hidden overflow-hidden md:block">
         <motion.div

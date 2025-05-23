@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Camera, ArrowRight } from "lucide-react";
+import { Camera } from "lucide-react";
 import { useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useGoogleAuth } from "@/hooks/use-google-auth";
@@ -29,12 +29,12 @@ export default function LoginPage() {
       {/* Floating elements */}
       <div className="absolute inset-0 overflow-hidden">
         <motion.div
-          className="absolute left-20 top-40 h-20 w-20 rounded-full bg-gradient-to-r from-blue-400 to-purple-500 opacity-10"
+          className="absolute left-20 top-20 h-20 w-20 rounded-full bg-gradient-to-r from-blue-400 to-purple-500 opacity-10"
           animate={{ y: [0, -20, 0], rotate: [0, 180, 360] }}
           transition={{ duration: 6, repeat: Infinity }}
         />
         <motion.div
-          className="absolute right-20 top-60 h-16 w-16 rounded-full bg-gradient-to-r from-purple-400 to-pink-500 opacity-10"
+          className="absolute right-20 top-3/4 h-16 w-16 rounded-full bg-gradient-to-r from-purple-400 to-pink-500 opacity-10"
           animate={{ y: [0, 20, 0], rotate: [360, 180, 0] }}
           transition={{ duration: 8, repeat: Infinity }}
         />
