@@ -11,24 +11,12 @@ import {
   Users,
   Camera,
   Share2,
-  LogOut,
   ArrowLeft,
   ExternalLink,
 } from "lucide-react";
 import Image from "next/image";
 import { format } from "date-fns";
 import { Separator } from "@/components/ui/separator";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { useState } from "react";
 
 export default function EventInfoPage() {
   const params = useParams();
@@ -36,8 +24,6 @@ export default function EventInfoPage() {
   const { toast } = useToast();
   const { user } = useAuth();
   const eventId = params.eventId as string;
-  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
-  const [isLeaveDialogOpen, setIsLeaveDialogOpen] = useState(false);
 
   // Fetch the event data
   const { data: event, isLoading } = api.event.getById.useQuery(
@@ -71,17 +57,6 @@ export default function EventInfoPage() {
         variant: "destructive",
       });
     }
-  };
-
-  // Mock leave event handler
-  const handleLeaveEvent = () => {
-    // This would be your actual leave event API call
-    // For now, just redirect to home
-    router.push("/dashboard");
-    toast({
-      title: "Left event",
-      description: "You have left the event successfully",
-    });
   };
 
   if (isLoading) {
@@ -180,27 +155,6 @@ export default function EventInfoPage() {
 
             <Separator />
 
-            {/* User preferences */}
-            <div className="space-y-4">
-              <h3 className="font-medium">Preferences</h3>
-
-              <div className="flex items-center justify-between space-x-2">
-                <div className="flex flex-col space-y-1">
-                  <Label htmlFor="notifications">Photo Notifications</Label>
-                  <p className="text-xs text-muted-foreground">
-                    Get notified when new photos are added
-                  </p>
-                </div>
-                <Switch
-                  id="notifications"
-                  checked={notificationsEnabled}
-                  onCheckedChange={setNotificationsEnabled}
-                />
-              </div>
-            </div>
-
-            <Separator />
-
             {/* Actions */}
             <div className="space-y-4">
               <h3 className="font-medium">Actions</h3>
@@ -214,46 +168,11 @@ export default function EventInfoPage() {
                   <Share2 className="mr-2 h-4 w-4" />
                   Share Event
                 </Button>
-
-                {!isOrganizer && (
-                  <Button
-                    variant="outline"
-                    onClick={() => setIsLeaveDialogOpen(true)}
-                    className="w-full justify-start text-red-500 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/20"
-                  >
-                    <LogOut className="mr-2 h-4 w-4" />
-                    Leave Event
-                  </Button>
-                )}
               </div>
             </div>
           </CardContent>
         </Card>
       </div>
-
-      {/* Leave Event Dialog */}
-      <Dialog open={isLeaveDialogOpen} onOpenChange={setIsLeaveDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Leave Event</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to leave this event? You will no longer have
-              access to photos.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setIsLeaveDialogOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button variant="destructive" onClick={handleLeaveEvent}>
-              Leave Event
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
