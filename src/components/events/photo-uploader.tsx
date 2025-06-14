@@ -373,7 +373,7 @@ const PhotoUploader = ({ eventId, className = "" }: PhotoUploaderProps) => {
             className="h-12 flex-1 bg-primary text-base font-medium hover:bg-primary/90"
             disabled={isUploading || isImageLoading || !capturedImage}
           >
-            {isImageLoading ? (
+            {isUploading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin sm:mr-2.5 sm:h-5 sm:w-5" />
                 {Math.round(progress)}%
