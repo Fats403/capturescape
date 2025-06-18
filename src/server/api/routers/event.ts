@@ -9,8 +9,9 @@ import {
 } from "@/lib/types/event";
 import { eventCreationSchema } from "@/lib/validations/event";
 import { z } from "zod";
-import { endOfDay, startOfDay } from "date-fns";
+import { endOfDay } from "date-fns";
 import * as admin from "firebase-admin";
+import { env } from "@/env";
 
 export const eventRouter = createTRPCRouter({
   create: protectedProcedure
@@ -168,6 +169,7 @@ export const eventRouter = createTRPCRouter({
         // Add participant
         batch.set(participantRef, {
           userId: user.uid,
+          email: user.email,
           eventId: input.eventId,
           joinedAt: Date.now(),
           role: "participant",
@@ -269,5 +271,42 @@ export const eventRouter = createTRPCRouter({
           cause: error,
         });
       }
+    }),
+
+  regenerateArchive: protectedProcedure
+    .input(
+      z.object({
+        eventId: z.string(),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      // Get your project ID and region from environment or config
+      const projectId = env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+      const region = "us-central1"; // or your deployed region
+
+      const functionUrl = `https://${region}-${projectId}.cloudfunctions.net/regenerateEventArchiveHTTP`;
+
+      const response = await fetch(functionUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          eventId: input.eventId,
+          userId: ctx.user.uid,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response
+          .json()
+          .catch(() => ({ error: "Unknown error" }));
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: errorData.error || "Failed to regenerate archive",
+        });
+      }
+
+      return await response.json();
     }),
 });

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
 import { api } from "@/trpc/react";
 import {
@@ -13,6 +13,10 @@ import {
   Camera,
   CalendarIcon,
   InfoIcon,
+  Upload,
+  Plus,
+  CheckCircle,
+  AlertCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -24,9 +28,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { Photo } from "@/lib/types/event";
 import { useAuth } from "@/providers/auth-provider";
+import { useImageUpload } from "@/hooks/use-image-upload";
 import Image from "next/image";
 import { saveAs } from "file-saver";
 import { formatRelative } from "date-fns";
@@ -39,6 +45,15 @@ type Direction = "next" | "prev";
 // Use a more explicit naming to avoid confusion
 type NavigateDirection = "next" | "prev";
 
+// Upload file interface
+interface UploadFile {
+  file: File;
+  id: string;
+  preview: string;
+  status: "pending" | "uploading" | "success" | "error";
+  error?: string;
+}
+
 export default function EventPhotosPage() {
   const params = useParams();
   const searchParams = useSearchParams();
@@ -47,12 +62,30 @@ export default function EventPhotosPage() {
   const { user } = useAuth();
   const eventId = params.eventId as string;
 
+  // Use your existing upload hook
+  const {
+    uploadEventPhoto,
+    progress,
+    isUploading: isSingleUploading,
+  } = useImageUpload();
+
   // Read photo ID from URL query parameter
   const photoIdFromUrl = searchParams.get("id");
 
   const [isDownloading, setIsDownloading] = useState(false);
   const [photoToDelete, setPhotoToDelete] = useState<Photo | null>(null);
   const [showSwipeHint, setShowSwipeHint] = useState(false);
+
+  // Upload-related state
+  const [showUploadDialog, setShowUploadDialog] = useState(false);
+  const [uploadFiles, setUploadFiles] = useState<UploadFile[]>([]);
+  const [currentUploadIndex, setCurrentUploadIndex] = useState(-1);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadComplete, setUploadComplete] = useState(false);
+  const [showArchiveButton, setShowArchiveButton] = useState(false);
+  const [isRegeneratingArchive, setIsRegeneratingArchive] = useState(false);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // First, add a ref to track if we've shown the hint
   const shownSwipeHintRef = useRef(false);
@@ -127,6 +160,8 @@ export default function EventPhotosPage() {
 
   const photosArray = photos ?? [];
 
+  const utils = api.useUtils();
+
   // Delete photo mutation
   const deletePhotoMutation = api.photo.deletePhoto.useMutation({
     onSuccess: () => {
@@ -149,7 +184,31 @@ export default function EventPhotosPage() {
     },
   });
 
-  const utils = api.useUtils();
+  // Archive regeneration mutation
+  const regenerateArchiveMutation = api.event.regenerateArchive.useMutation({
+    onSuccess: () => {
+      toast({
+        title: "Archive updated!",
+        description: "All photos have been added to the downloadable archive.",
+        variant: "success",
+      });
+      setShowArchiveButton(false);
+      setUploadComplete(false);
+      setUploadFiles([]);
+      setShowUploadDialog(false);
+      setIsRegeneratingArchive(false);
+      // Refresh the photos
+      void utils.event.getEventPhotos.invalidate({ eventId });
+    },
+    onError: (error) => {
+      toast({
+        title: "Archive update failed",
+        description: error.message || "Failed to update archive",
+        variant: "destructive",
+      });
+      setIsRegeneratingArchive(false);
+    },
+  });
 
   // Handle delete photo
   const handleDeletePhoto = async () => {
@@ -160,6 +219,155 @@ export default function EventPhotosPage() {
       eventId,
     });
   };
+
+  // Handle file selection
+  const handleFileSelect = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const files = Array.from(event.target.files || []);
+
+      const newUploadFiles: UploadFile[] = files.map((file, index) => ({
+        file,
+        id: `${Date.now()}-${index}`,
+        preview: URL.createObjectURL(file),
+        status: "pending",
+      }));
+
+      setUploadFiles((prev) => [...prev, ...newUploadFiles]);
+      setUploadComplete(false);
+      setShowArchiveButton(false);
+
+      // Clear the input so same files can be selected again
+      if (event.target) {
+        event.target.value = "";
+      }
+    },
+    [],
+  );
+
+  // Remove a file from upload queue
+  const removeFile = useCallback((fileId: string) => {
+    setUploadFiles((prev) => {
+      const updated = prev.filter((f) => f.id !== fileId);
+      // Clean up object URL
+      const fileToRemove = prev.find((f) => f.id === fileId);
+      if (fileToRemove) {
+        URL.revokeObjectURL(fileToRemove.preview);
+      }
+      return updated;
+    });
+  }, []);
+
+  // Upload all files sequentially using your hook
+  const handleUploadAll = async () => {
+    if (uploadFiles.length === 0 || !user?.uid) return;
+
+    setIsUploading(true);
+    let successCount = 0;
+    let failureCount = 0;
+
+    try {
+      // Upload files one by one to show individual progress
+      for (let i = 0; i < uploadFiles.length; i++) {
+        const uploadFile = uploadFiles[i];
+
+        if (uploadFile?.status === "success") {
+          successCount++;
+          continue;
+        }
+
+        setCurrentUploadIndex(i);
+
+        // Update status to uploading
+        setUploadFiles((prev) =>
+          prev.map((f, index) =>
+            index === i ? { ...f, status: "uploading" } : f,
+          ),
+        );
+
+        try {
+          if (!uploadFile) {
+            throw new Error("Upload file is undefined");
+          }
+
+          await uploadEventPhoto(uploadFile.file, eventId, user.uid);
+
+          // Update status to success
+          setUploadFiles((prev) =>
+            prev.map((f, index) =>
+              index === i ? { ...f, status: "success" } : f,
+            ),
+          );
+
+          successCount++;
+        } catch (error) {
+          const errorMessage =
+            error instanceof Error ? error.message : "Upload failed";
+
+          // Update status to error
+          setUploadFiles((prev) =>
+            prev.map((f, index) =>
+              index === i ? { ...f, status: "error", error: errorMessage } : f,
+            ),
+          );
+
+          failureCount++;
+        }
+      }
+
+      setCurrentUploadIndex(-1);
+
+      // Show results
+      if (successCount > 0) {
+        toast({
+          title: "Upload complete!",
+          description: `${successCount} photos uploaded successfully${failureCount > 0 ? `, ${failureCount} failed` : ""}.`,
+          variant: successCount === uploadFiles.length ? "success" : "default",
+        });
+
+        setUploadComplete(true);
+
+        // Automatically regenerate archive if event has ended
+        if (event && new Date(event.endDate) <= new Date()) {
+          // Wait for image processing before triggering archive regeneration
+          const delaySeconds = successCount * 5;
+
+          setTimeout(() => {
+            setIsRegeneratingArchive(true);
+            regenerateArchiveMutation.mutate({ eventId });
+          }, delaySeconds * 1000);
+        }
+      } else {
+        toast({
+          title: "Upload failed",
+          description: "No photos were uploaded successfully.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Upload error",
+        description: "An unexpected error occurred during upload.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  // Handle archive regeneration
+  const handleRegenerateArchive = async () => {
+    setIsRegeneratingArchive(true);
+    regenerateArchiveMutation.mutate({ eventId });
+  };
+
+  // Clean up object URLs when component unmounts
+  useEffect(() => {
+    return () => {
+      uploadFiles.forEach((file) => {
+        URL.revokeObjectURL(file.preview);
+      });
+    };
+  }, [uploadFiles]);
 
   // For single photo download
   const handleDownloadSingle = async (photo: Photo) => {
@@ -363,6 +571,12 @@ export default function EventPhotosPage() {
         <p className="mt-2 text-muted-foreground">
           There are no photos in this event yet.
         </p>
+        {user && (
+          <Button className="mt-4" onClick={() => setShowUploadDialog(true)}>
+            <Upload className="mr-2 h-4 w-4" />
+            Upload Photos
+          </Button>
+        )}
       </div>
     );
   }
@@ -398,7 +612,7 @@ export default function EventPhotosPage() {
 
         {/* Photo controls section with download buttons side-by-side */}
         <div className="mb-6">
-          <div className="max-w-sm">
+          <div className="flex gap-3">
             <Button
               variant="default"
               size="sm"
@@ -413,6 +627,19 @@ export default function EventPhotosPage() {
               )}
               <span className="text-sm">Download All</span>
             </Button>
+
+            {/* Add upload button - only show if user is authenticated */}
+            {user && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowUploadDialog(true)}
+                className="flex h-10 items-center justify-center gap-1.5"
+              >
+                <Upload className="mr-1 h-4 w-4" />
+                <span className="text-sm">Upload Photos</span>
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -426,7 +653,7 @@ export default function EventPhotosPage() {
             className="group relative aspect-square w-full cursor-pointer overflow-hidden rounded-md"
           >
             <Image
-              src={photo.urls.thumbnail}
+              src={photo.urls.medium}
               alt={`Photo ${photo.id}`}
               className="h-full w-full cursor-pointer rounded-md object-cover transition-transform duration-300 ease-in-out hover:scale-[1.02] group-hover:brightness-90"
               width={500}
@@ -469,6 +696,247 @@ export default function EventPhotosPage() {
           </div>
         ))}
       </div>
+
+      {/* Upload Dialog */}
+      <Dialog open={showUploadDialog} onOpenChange={setShowUploadDialog}>
+        <DialogContent className="max-h-[90vh] max-w-4xl overflow-hidden">
+          <DialogHeader>
+            <DialogTitle>Upload Photos to {event?.name}</DialogTitle>
+            <DialogDescription>
+              Select multiple photos to upload to this event. They will be
+              processed and added to the gallery.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex flex-col gap-4 overflow-hidden">
+            {/* File selection area */}
+            {uploadFiles.length === 0 && (
+              <div className="rounded-lg border-2 border-dashed border-muted-foreground/25 p-8 text-center">
+                <Camera className="mx-auto mb-4 h-12 w-12 text-muted-foreground/50" />
+                <p className="mb-2 text-lg font-medium">
+                  Select photos to upload
+                </p>
+                <p className="mb-4 text-sm text-muted-foreground">
+                  Choose multiple photos from your device
+                </p>
+                <Button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="gap-2"
+                >
+                  <Plus className="h-4 w-4" />
+                  Choose Photos
+                </Button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  accept="image/*"
+                  onChange={handleFileSelect}
+                  className="hidden"
+                />
+              </div>
+            )}
+
+            {/* Photo preview grid */}
+            {uploadFiles.length > 0 && (
+              <div className="flex max-h-[60vh] flex-col gap-4 overflow-y-auto">
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-muted-foreground">
+                      {uploadFiles.length} photo
+                      {uploadFiles.length !== 1 ? "s" : ""} selected
+                    </p>
+                  </div>
+
+                  {/* More prominent Add More button */}
+                  <Button
+                    variant="secondary"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isUploading}
+                    className="w-full justify-center gap-2 border-2 border-dashed border-muted-foreground bg-muted/50 hover:bg-muted"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add More Photos
+                  </Button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    accept="image/*"
+                    onChange={handleFileSelect}
+                    className="hidden"
+                  />
+                </div>
+
+                {/* Overall progress */}
+                {isUploading && (
+                  <div className="rounded-lg bg-muted p-3">
+                    <div className="mb-2 flex items-center justify-between">
+                      <span className="text-sm font-medium">
+                        Uploading photos... (
+                        {uploadFiles.filter((f) => f.status === "success")
+                          .length + 1}
+                        /{uploadFiles.length})
+                      </span>
+                      <span className="text-sm text-muted-foreground">
+                        {Math.round(progress)}%
+                      </span>
+                    </div>
+                    <Progress value={progress} className="h-2" />
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+                  {uploadFiles.map((uploadFile, index) => (
+                    <div key={uploadFile.id} className="group relative">
+                      <div className="aspect-square overflow-hidden rounded-lg bg-muted">
+                        <Image
+                          src={uploadFile.preview}
+                          alt="Upload preview"
+                          className="h-full w-full object-cover"
+                          width={200}
+                          height={200}
+                        />
+                      </div>
+
+                      {/* Status overlay */}
+                      <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/50">
+                        {uploadFile.status === "pending" && (
+                          <div className="text-center text-white">
+                            <Camera className="mx-auto mb-1 h-6 w-6" />
+                            <p className="text-xs">Ready</p>
+                          </div>
+                        )}
+
+                        {uploadFile.status === "uploading" && (
+                          <div className="w-full px-2 text-center text-white">
+                            <Loader2 className="mx-auto mb-1 h-6 w-6 animate-spin" />
+                            <p className="text-xs">Uploading...</p>
+                          </div>
+                        )}
+
+                        {uploadFile.status === "success" && (
+                          <div className="text-center text-green-400">
+                            <CheckCircle className="mx-auto mb-1 h-6 w-6" />
+                            <p className="text-xs">Done</p>
+                          </div>
+                        )}
+
+                        {uploadFile.status === "error" && (
+                          <div className="px-2 text-center text-red-400">
+                            <AlertCircle className="mx-auto mb-1 h-6 w-6" />
+                            <p className="text-xs">Error</p>
+                            {uploadFile.error && (
+                              <p className="mt-1 text-xs opacity-75">
+                                {uploadFile.error}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Remove button */}
+                      {!isUploading && (
+                        <Button
+                          variant="destructive"
+                          size="icon"
+                          className="absolute -right-2 -top-2 h-6 w-6 rounded-full opacity-0 transition-opacity group-hover:opacity-100"
+                          onClick={() => removeFile(uploadFile.id)}
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      )}
+
+                      {/* Current upload indicator */}
+                      {isUploading && index === currentUploadIndex && (
+                        <div className="absolute -left-1 -top-1 h-3 w-3 animate-pulse rounded-full bg-blue-500" />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="flex flex-col gap-3">
+            {/* Upload progress and controls */}
+            {uploadFiles.length > 0 && (
+              <div className="flex w-full flex-col gap-3">
+                {!uploadComplete && !isRegeneratingArchive && (
+                  <Button
+                    onClick={handleUploadAll}
+                    disabled={isUploading || uploadFiles.length === 0}
+                    className="w-full"
+                  >
+                    {isUploading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Uploading Photos...
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="mr-2 h-4 w-4" />
+                        Upload {uploadFiles.length} Photo
+                        {uploadFiles.length !== 1 ? "s" : ""}
+                      </>
+                    )}
+                  </Button>
+                )}
+
+                {/* Show processing delay after upload completes but before archive starts */}
+                {uploadComplete &&
+                  !isRegeneratingArchive &&
+                  event &&
+                  new Date(event.endDate) <= new Date() && (
+                    <div className="flex flex-col gap-3">
+                      <div className="text-center text-sm text-muted-foreground">
+                        Processing photos before updating archive...
+                      </div>
+                      <div className="w-full">
+                        <Progress value={undefined} className="h-2" />
+                      </div>
+                    </div>
+                  )}
+
+                {/* Archive regeneration status */}
+                {isRegeneratingArchive && (
+                  <div className="flex flex-col gap-3">
+                    <div className="text-center text-sm text-muted-foreground">
+                      Uploading to download archive...
+                    </div>
+                    <div className="w-full">
+                      <Progress value={undefined} className="h-2" />
+                    </div>
+                    <Button disabled className="w-full" variant="default">
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Updating Archive...
+                    </Button>
+                  </div>
+                )}
+
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setShowUploadDialog(false);
+                      setUploadFiles([]);
+                      setUploadComplete(false);
+                      setShowArchiveButton(false);
+                      setCurrentUploadIndex(-1);
+                      setIsRegeneratingArchive(false);
+                    }}
+                    className="flex-1"
+                  >
+                    {uploadComplete || isRegeneratingArchive
+                      ? "Close"
+                      : "Cancel"}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Photo Viewer Modal */}
       <Dialog

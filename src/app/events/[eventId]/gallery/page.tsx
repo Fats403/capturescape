@@ -37,7 +37,7 @@ export default function GalleryPage() {
 
   if (event?.status === "completed") {
     return (
-      <div className="flex h-[calc(100vh-80px)] w-full flex-col items-center justify-center p-4">
+      <div className="relative z-50 flex h-[calc(100vh-80px)] w-full flex-col items-center justify-center p-4">
         <div className="max-w-md text-center">
           <div className="relative mx-auto mb-4 h-48 w-48 overflow-hidden rounded-full border-4 border-background shadow-md">
             {event?.coverImage ? (
