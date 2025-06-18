@@ -223,7 +223,7 @@ export default function EventPhotosPage() {
   // Handle file selection
   const handleFileSelect = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
-      const files = Array.from(event.target.files || []);
+      const files = Array.from(event.target.files ?? []);
 
       const newUploadFiles: UploadFile[] = files.map((file, index) => ({
         file,
@@ -890,7 +890,8 @@ export default function EventPhotosPage() {
                   new Date(event.endDate) <= new Date() && (
                     <div className="flex flex-col gap-3">
                       <div className="text-center text-sm text-muted-foreground">
-                        Processing photos before updating archive...
+                        Processing photos before updating archive... This could
+                        take a few minutes.
                       </div>
                       <div className="w-full">
                         <Progress value={undefined} className="h-2" />

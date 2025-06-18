@@ -286,27 +286,49 @@ export const eventRouter = createTRPCRouter({
 
       const functionUrl = `https://${region}-${projectId}.cloudfunctions.net/regenerateEventArchiveHTTP`;
 
-      const response = await fetch(functionUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          eventId: input.eventId,
-          userId: ctx.user.uid,
-        }),
-      });
+      try {
+        const response = await fetch(functionUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            eventId: input.eventId,
+            userId: ctx.user.uid,
+          }),
+        });
 
-      if (!response.ok) {
-        const errorData = await response
-          .json()
-          .catch(() => ({ error: "Unknown error" }));
+        if (!response.ok) {
+          let errorMessage = "Failed to regenerate archive";
+
+          try {
+            const errorData = (await response.json()) as { error?: string };
+            errorMessage = errorData.error ?? errorMessage;
+          } catch {
+            // If JSON parsing fails, use default message
+          }
+
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: errorMessage,
+          });
+        }
+
+        const result = (await response.json()) as {
+          success: boolean;
+          message?: string;
+        };
+        return result;
+      } catch (error) {
+        if (error instanceof TRPCError) {
+          throw error;
+        }
+
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
-          message: errorData.error || "Failed to regenerate archive",
+          message: "Failed to regenerate archive",
+          cause: error,
         });
       }
-
-      return await response.json();
     }),
 });
