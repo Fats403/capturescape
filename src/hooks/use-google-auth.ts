@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
 import {
   signInWithPopup,
@@ -12,12 +12,10 @@ import { api } from "@/trpc/react";
 interface UseGoogleAuthOptions {
   onSuccess?: (result: UserCredential) => Promise<void> | void;
   onError?: (error: Error) => void;
+  eventId?: string;
 }
 
-export function useGoogleAuth({
-  onSuccess,
-  onError,
-}: UseGoogleAuthOptions = {}) {
+export function useGoogleAuth(options?: UseGoogleAuthOptions) {
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
   const login = api.auth.login.useMutation();
@@ -39,12 +37,13 @@ export function useGoogleAuth({
           displayName: result.user.displayName,
           photoURL: result.user.photoURL,
         },
+        eventId: options?.eventId,
       });
 
       // Invalidate the auth query to refresh user data
       await utils.auth.getUser.invalidate();
 
-      await onSuccess?.(result);
+      await options?.onSuccess?.(result);
     } catch (error) {
       setLoading(false);
       const errorMessage =
@@ -54,11 +53,15 @@ export function useGoogleAuth({
         description: errorMessage,
         variant: "destructive",
       });
-      onError?.(error instanceof Error ? error : new Error(errorMessage));
+      options?.onError?.(
+        error instanceof Error ? error : new Error(errorMessage),
+      );
     }
   };
 
-  const signIn = async () => {
+  const signIn = useCallback(async () => {
+    if (!auth || loading) return;
+
     setLoading(true);
     const provider = new GoogleAuthProvider();
 
@@ -83,9 +86,11 @@ export function useGoogleAuth({
         description: errorMessage,
         variant: "destructive",
       });
-      onError?.(error instanceof Error ? error : new Error(errorMessage));
+      options?.onError?.(
+        error instanceof Error ? error : new Error(errorMessage),
+      );
     }
-  };
+  }, [auth, loading, login, options]);
 
   return {
     signIn,

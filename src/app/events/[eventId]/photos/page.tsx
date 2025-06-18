@@ -37,6 +37,8 @@ import { saveAs } from "file-saver";
 import { formatRelative } from "date-fns";
 import { useSwipeable } from "react-swipeable";
 import { motion } from "framer-motion";
+import { useGoogleAuth } from "@/hooks/use-google-auth";
+import { GoogleButton } from "@/components/auth/google-button";
 
 // Mobile-specific optimizations
 const MOBILE_MAX_DIMENSION = 1920; // Max width/height for mobile
@@ -126,7 +128,6 @@ export default function EventPhotosPage() {
 
   const [isDownloading, setIsDownloading] = useState(false);
   const [photoToDelete, setPhotoToDelete] = useState<Photo | null>(null);
-  const [showSwipeHint, setShowSwipeHint] = useState(false);
 
   // Upload-related state
   const [showUploadDialog, setShowUploadDialog] = useState(false);
@@ -134,13 +135,9 @@ export default function EventPhotosPage() {
   const [currentUploadIndex, setCurrentUploadIndex] = useState(-1);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadComplete, setUploadComplete] = useState(false);
-  const [showArchiveButton, setShowArchiveButton] = useState(false);
   const [isRegeneratingArchive, setIsRegeneratingArchive] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // First, add a ref to track if we've shown the hint
-  const shownSwipeHintRef = useRef(false);
 
   // Track only the essential state
   const [currentPhoto, setCurrentPhoto] = useState<Photo | null>(null);
@@ -244,7 +241,6 @@ export default function EventPhotosPage() {
         description: "All photos have been added to the downloadable archive.",
         variant: "success",
       });
-      setShowArchiveButton(false);
       setUploadComplete(false);
       setUploadFiles([]);
       setShowUploadDialog(false);
@@ -286,7 +282,6 @@ export default function EventPhotosPage() {
 
       setUploadFiles((prev) => [...prev, ...newUploadFiles]);
       setUploadComplete(false);
-      setShowArchiveButton(false);
 
       // Clear the input so same files can be selected again
       if (event.target) {
@@ -298,21 +293,8 @@ export default function EventPhotosPage() {
         try {
           let processedFile: File | Blob = uploadFile.file;
 
-          // Check if mobile and needs processing
           if (isMobile() && uploadFile.file.size > 1024 * 1024) {
-            // 1MB threshold
-            console.log(
-              `Processing ${uploadFile.file.name} for mobile upload...`,
-            );
-            console.log(
-              `Original size: ${(uploadFile.file.size / 1024 / 1024).toFixed(2)}MB`,
-            );
-
             processedFile = await resizeImageForMobile(uploadFile.file);
-
-            console.log(
-              `Processed size: ${(processedFile.size / 1024 / 1024).toFixed(2)}MB`,
-            );
           }
 
           // Update file status to ready
@@ -482,12 +464,6 @@ export default function EventPhotosPage() {
     }
   };
 
-  // Handle archive regeneration
-  const handleRegenerateArchive = async () => {
-    setIsRegeneratingArchive(true);
-    regenerateArchiveMutation.mutate({ eventId });
-  };
-
   // Clean up object URLs when component unmounts
   useEffect(() => {
     return () => {
@@ -652,24 +628,24 @@ export default function EventPhotosPage() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [currentPhoto, closePhoto]);
 
-  // Update the hint effect to only show once
-  useEffect(() => {
-    if (selectedPhoto && !shownSwipeHintRef.current) {
-      // Only show the hint on mobile devices
-      const isMobile = window.innerWidth < 768;
-      if (isMobile) {
-        setShowSwipeHint(true);
-        // Hide after 3 seconds
-        const timer = setTimeout(() => {
-          setShowSwipeHint(false);
-          shownSwipeHintRef.current = true; // Mark as shown
-        }, 1500);
-        return () => clearTimeout(timer);
-      }
-    } else if (!selectedPhoto) {
-      setShowSwipeHint(false);
-    }
-  }, [selectedPhoto]);
+  // Add this state in your component
+  const [showLoginDialog, setShowLoginDialog] = useState(false);
+
+  // Add the Google auth hook
+  const { signIn, loading: authLoading } = useGoogleAuth({
+    eventId,
+    onSuccess: useCallback(() => {
+      setShowLoginDialog(false);
+      toast({
+        title: "Welcome!",
+        description:
+          "You've been added to this event and can now upload photos.",
+        variant: "success",
+      });
+      // Refresh the event data to show updated participant count
+      void utils.event.getById.invalidate({ id: eventId });
+    }, [toast, eventId, utils]),
+  });
 
   if (isEventLoading || isPhotosLoading) {
     return (
@@ -699,10 +675,15 @@ export default function EventPhotosPage() {
         <p className="mt-2 text-muted-foreground">
           There are no photos in this event yet.
         </p>
-        {user && (
+        {user ? (
           <Button className="mt-4" onClick={() => setShowUploadDialog(true)}>
             <Upload className="mr-2 h-4 w-4" />
             Upload Photos
+          </Button>
+        ) : (
+          <Button className="mt-4" onClick={() => setShowLoginDialog(true)}>
+            <Upload className="mr-2 h-4 w-4" />
+            Login to Upload Photos
           </Button>
         )}
       </div>
@@ -756,8 +737,8 @@ export default function EventPhotosPage() {
               <span className="text-sm">Download All</span>
             </Button>
 
-            {/* Add upload button - only show if user is authenticated */}
-            {user && (
+            {/* Add upload button - show login button if not authenticated */}
+            {user ? (
               <Button
                 variant="outline"
                 size="sm"
@@ -766,6 +747,16 @@ export default function EventPhotosPage() {
               >
                 <Upload className="mr-1 h-4 w-4" />
                 <span className="text-sm">Upload Photos</span>
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowLoginDialog(true)}
+                className="flex h-10 items-center justify-center gap-1.5"
+              >
+                <Upload className="mr-1 h-4 w-4" />
+                <span className="text-sm">Login to Upload</span>
               </Button>
             )}
           </div>
@@ -792,16 +783,6 @@ export default function EventPhotosPage() {
             <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
 
             <div className="absolute bottom-2 right-2 z-10 flex gap-2 opacity-0 transition-opacity group-hover:opacity-100">
-              <Button
-                variant="secondary"
-                size="icon"
-                className="h-8 w-8 rounded-full bg-white/30 backdrop-blur-sm"
-                onClick={(e) => {
-                  e.stopPropagation();
-                }}
-              >
-                <InfoIcon className="h-4 w-4" />
-              </Button>
               <Button
                 variant="secondary"
                 size="icon"
@@ -1084,7 +1065,6 @@ export default function EventPhotosPage() {
                       setShowUploadDialog(false);
                       setUploadFiles([]);
                       setUploadComplete(false);
-                      setShowArchiveButton(false);
                       setCurrentUploadIndex(-1);
                       setIsRegeneratingArchive(false);
                     }}
@@ -1263,6 +1243,54 @@ export default function EventPhotosPage() {
               ) : (
                 "Delete"
               )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Login Dialog */}
+      <Dialog open={showLoginDialog} onOpenChange={setShowLoginDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Camera className="h-5 w-5 text-blue-500" />
+              Login to Upload Photos
+            </DialogTitle>
+            <DialogDescription>
+              Sign in with Google to upload and share photos for this event.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex flex-col gap-4 py-4">
+            <div className="text-center">
+              <div className="mb-4 flex items-center justify-center">
+                <div className="rounded-full bg-blue-50 p-3 dark:bg-blue-950/20">
+                  <Upload className="h-6 w-6 text-blue-500" />
+                </div>
+              </div>
+              <h3 className="font-semibold text-gray-900 dark:text-gray-100">
+                {event?.name}
+              </h3>
+              <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                Join others in sharing memories from this event
+              </p>
+            </div>
+
+            <GoogleButton
+              onClick={signIn}
+              disabled={authLoading}
+              loading={authLoading}
+              className="w-full rounded-xl border border-gray-200 bg-white px-6 py-3 font-medium text-gray-700 transition-all duration-300 hover:border-blue-500 hover:shadow-lg dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+            />
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowLoginDialog(false)}
+              className="w-full"
+            >
+              Maybe Later
             </Button>
           </DialogFooter>
         </DialogContent>

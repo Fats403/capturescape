@@ -3,6 +3,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { cookies } from "next/headers";
 import { adminAuth, db } from "@/lib/firebase-admin";
+import * as admin from "firebase-admin";
 
 export const authRouter = createTRPCRouter({
   getUser: publicProcedure.query(async ({ ctx }) => {
@@ -19,6 +20,7 @@ export const authRouter = createTRPCRouter({
           displayName: z.string().nullable(),
           photoURL: z.string().nullable(),
         }),
+        eventId: z.string().optional(),
       }),
     )
     .mutation(async ({ input }) => {
@@ -48,6 +50,41 @@ export const authRouter = createTRPCRouter({
           },
           { merge: true },
         );
+
+        if (input.eventId) {
+          try {
+            const eventRef = db.collection("events").doc(input.eventId);
+            const participantRef = eventRef
+              .collection("participants")
+              .doc(input.user.uid);
+
+            const [eventDoc, participantDoc] = await Promise.all([
+              eventRef.get(),
+              participantRef.get(),
+            ]);
+
+            if (eventDoc.exists && !participantDoc.exists) {
+              const batch = db.batch();
+
+              batch.set(participantRef, {
+                userId: input.user.uid,
+                email: input.user.email,
+                eventId: input.eventId,
+                joinedAt: Date.now(),
+                role: "participant",
+                photoCount: 0,
+              });
+
+              batch.update(eventRef, {
+                participantCount: admin.firestore.FieldValue.increment(1),
+              });
+
+              await batch.commit();
+            }
+          } catch (eventError) {
+            console.error("Failed to auto-join event:", eventError);
+          }
+        }
 
         return { success: true };
       } catch (error) {
