@@ -452,12 +452,6 @@ export default function EventPhotosPage() {
 
       // Show results
       if (successCount > 0) {
-        toast({
-          title: "Upload complete!",
-          description: `${successCount} photos uploaded successfully${failureCount > 0 ? `, ${failureCount} failed` : ""}.`,
-          variant: successCount === uploadFiles.length ? "success" : "default",
-        });
-
         setUploadComplete(true);
 
         // Automatically regenerate archive if event has ended
