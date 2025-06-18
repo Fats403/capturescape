@@ -19,7 +19,6 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -37,21 +36,74 @@ import Image from "next/image";
 import { saveAs } from "file-saver";
 import { formatRelative } from "date-fns";
 import { useSwipeable } from "react-swipeable";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 
-// Define the navigation directions more clearly
-type Direction = "next" | "prev";
+// Mobile-specific optimizations
+const MOBILE_MAX_DIMENSION = 1920; // Max width/height for mobile
+const MOBILE_QUALITY = 0.87; // Slightly lower quality for mobile
 
-// Use a more explicit naming to avoid confusion
-type NavigateDirection = "next" | "prev";
+function isMobile(): boolean {
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+    navigator.userAgent,
+  );
+}
+
+async function resizeImageForMobile(file: File): Promise<Blob> {
+  const img = new window.Image();
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d")!;
+
+  return new Promise((resolve, reject) => {
+    img.onload = () => {
+      let { width, height } = img;
+
+      // Calculate new dimensions if image is too large
+      if (width > MOBILE_MAX_DIMENSION || height > MOBILE_MAX_DIMENSION) {
+        const ratio = Math.min(
+          MOBILE_MAX_DIMENSION / width,
+          MOBILE_MAX_DIMENSION / height,
+        );
+        width = Math.floor(width * ratio);
+        height = Math.floor(height * ratio);
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+
+      // Draw image on canvas with new dimensions
+      ctx.drawImage(img, 0, 0, width, height);
+
+      // Convert to WebP with compression for mobile (CHANGED FROM JPEG)
+      canvas.toBlob(
+        (blob) => {
+          if (blob) {
+            resolve(blob);
+          } else {
+            reject(new Error("WebP conversion failed")); // Updated error message
+          }
+        },
+        "image/webp", // CHANGED FROM "image/jpeg"
+        MOBILE_QUALITY,
+      );
+    };
+
+    img.onerror = () => {
+      reject(new Error("Failed to load image"));
+    };
+
+    // Load image from file
+    img.src = URL.createObjectURL(file);
+  });
+}
 
 // Upload file interface
 interface UploadFile {
   file: File;
   id: string;
   preview: string;
-  status: "pending" | "uploading" | "success" | "error";
+  status: "processing" | "pending" | "uploading" | "success" | "error";
   error?: string;
+  processedFile?: File | Blob;
 }
 
 export default function EventPhotosPage() {
@@ -220,16 +272,16 @@ export default function EventPhotosPage() {
     });
   };
 
-  // Handle file selection
+  // Handle file selection with actual processing
   const handleFileSelect = useCallback(
-    (event: React.ChangeEvent<HTMLInputElement>) => {
+    async (event: React.ChangeEvent<HTMLInputElement>) => {
       const files = Array.from(event.target.files ?? []);
 
       const newUploadFiles: UploadFile[] = files.map((file, index) => ({
         file,
         id: `${Date.now()}-${index}`,
         preview: URL.createObjectURL(file),
-        status: "pending",
+        status: "processing", // Start with processing status
       }));
 
       setUploadFiles((prev) => [...prev, ...newUploadFiles]);
@@ -239,6 +291,56 @@ export default function EventPhotosPage() {
       // Clear the input so same files can be selected again
       if (event.target) {
         event.target.value = "";
+      }
+
+      // Process files asynchronously
+      for (const uploadFile of newUploadFiles) {
+        try {
+          let processedFile: File | Blob = uploadFile.file;
+
+          // Check if mobile and needs processing
+          if (isMobile() && uploadFile.file.size > 1024 * 1024) {
+            // 1MB threshold
+            console.log(
+              `Processing ${uploadFile.file.name} for mobile upload...`,
+            );
+            console.log(
+              `Original size: ${(uploadFile.file.size / 1024 / 1024).toFixed(2)}MB`,
+            );
+
+            processedFile = await resizeImageForMobile(uploadFile.file);
+
+            console.log(
+              `Processed size: ${(processedFile.size / 1024 / 1024).toFixed(2)}MB`,
+            );
+          }
+
+          // Update file status to ready
+          setUploadFiles((prev) =>
+            prev.map((f) =>
+              f.id === uploadFile.id
+                ? { ...f, status: "pending", processedFile }
+                : f,
+            ),
+          );
+        } catch (error) {
+          console.error(`Failed to process ${uploadFile.file.name}:`, error);
+          // Mark as error if processing fails
+          setUploadFiles((prev) =>
+            prev.map((f) =>
+              f.id === uploadFile.id
+                ? {
+                    ...f,
+                    status: "error",
+                    error:
+                      error instanceof Error
+                        ? error.message
+                        : "Failed to process image",
+                  }
+                : f,
+            ),
+          );
+        }
       }
     },
     [],
@@ -257,9 +359,21 @@ export default function EventPhotosPage() {
     });
   }, []);
 
-  // Upload all files sequentially using your hook
+  // Update the upload function to use processed files
   const handleUploadAll = async () => {
     if (uploadFiles.length === 0 || !user?.uid) return;
+
+    // Check if all files are ready
+    const notReadyFiles = uploadFiles.filter((f) => f.status === "processing");
+    if (notReadyFiles.length > 0) {
+      toast({
+        title: "Please wait",
+        description:
+          "Some photos are still being processed. Please wait a moment.",
+        variant: "default",
+      });
+      return;
+    }
 
     setIsUploading(true);
     let successCount = 0;
@@ -272,6 +386,11 @@ export default function EventPhotosPage() {
 
         if (uploadFile?.status === "success") {
           successCount++;
+          continue;
+        }
+
+        if (uploadFile?.status === "error") {
+          failureCount++;
           continue;
         }
 
@@ -289,7 +408,22 @@ export default function EventPhotosPage() {
             throw new Error("Upload file is undefined");
           }
 
-          await uploadEventPhoto(uploadFile.file, eventId, user.uid);
+          // Use the processed file if available, otherwise use original
+          const fileToUpload = uploadFile.processedFile ?? uploadFile.file;
+
+          // Create a File object if we have a Blob
+          const finalFile =
+            fileToUpload instanceof File
+              ? fileToUpload
+              : new File(
+                  [fileToUpload],
+                  `${uploadFile.file.name.split(".")[0]}.webp`,
+                  {
+                    type: "image/webp",
+                  },
+                );
+
+          await uploadEventPhoto(finalFile, eventId, user.uid);
 
           // Update status to success
           setUploadFiles((prev) =>
@@ -745,6 +879,16 @@ export default function EventPhotosPage() {
                     <p className="text-sm text-muted-foreground">
                       {uploadFiles.length} photo
                       {uploadFiles.length !== 1 ? "s" : ""} selected
+                      {uploadFiles.some((f) => f.status === "processing") && (
+                        <span className="ml-2 text-blue-600">
+                          (Processing{" "}
+                          {
+                            uploadFiles.filter((f) => f.status === "processing")
+                              .length
+                          }
+                          ...)
+                        </span>
+                      )}
                     </p>
                   </div>
 
@@ -801,6 +945,13 @@ export default function EventPhotosPage() {
 
                       {/* Status overlay */}
                       <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/50">
+                        {uploadFile.status === "processing" && (
+                          <div className="text-center text-blue-400">
+                            <Loader2 className="mx-auto mb-1 h-6 w-6 animate-spin" />
+                            <p className="text-xs">Processing...</p>
+                          </div>
+                        )}
+
                         {uploadFile.status === "pending" && (
                           <div className="text-center text-white">
                             <Camera className="mx-auto mb-1 h-6 w-6" />
@@ -865,7 +1016,11 @@ export default function EventPhotosPage() {
                 {!uploadComplete && !isRegeneratingArchive && (
                   <Button
                     onClick={handleUploadAll}
-                    disabled={isUploading || uploadFiles.length === 0}
+                    disabled={
+                      isUploading ||
+                      uploadFiles.length === 0 ||
+                      uploadFiles.some((f) => f.status === "processing")
+                    }
                     className="w-full"
                   >
                     {isUploading ? (
@@ -873,11 +1028,24 @@ export default function EventPhotosPage() {
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                         Uploading Photos...
                       </>
+                    ) : uploadFiles.some((f) => f.status === "processing") ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Processing Photos...
+                      </>
                     ) : (
                       <>
                         <Upload className="mr-2 h-4 w-4" />
-                        Upload {uploadFiles.length} Photo
-                        {uploadFiles.length !== 1 ? "s" : ""}
+                        Upload{" "}
+                        {
+                          uploadFiles.filter((f) => f.status === "pending")
+                            .length
+                        }{" "}
+                        Photo
+                        {uploadFiles.filter((f) => f.status === "pending")
+                          .length !== 1
+                          ? "s"
+                          : ""}
                       </>
                     )}
                   </Button>

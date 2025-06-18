@@ -5,64 +5,6 @@ import { storage } from "@/lib/firebase";
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
-// Mobile-specific optimizations
-const MOBILE_MAX_DIMENSION = 1920; // Max width/height for mobile
-const MOBILE_QUALITY = 0.8; // Slightly lower quality for mobile
-
-function isMobile(): boolean {
-  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
-    navigator.userAgent,
-  );
-}
-
-async function resizeImageForMobile(file: File): Promise<Blob> {
-  const img = new Image();
-  const canvas = document.createElement("canvas");
-  const ctx = canvas.getContext("2d")!;
-
-  return new Promise((resolve, reject) => {
-    img.onload = () => {
-      let { width, height } = img;
-
-      // Calculate new dimensions if image is too large
-      if (width > MOBILE_MAX_DIMENSION || height > MOBILE_MAX_DIMENSION) {
-        const ratio = Math.min(
-          MOBILE_MAX_DIMENSION / width,
-          MOBILE_MAX_DIMENSION / height,
-        );
-        width = Math.floor(width * ratio);
-        height = Math.floor(height * ratio);
-      }
-
-      canvas.width = width;
-      canvas.height = height;
-
-      // Draw image on canvas with new dimensions
-      ctx.drawImage(img, 0, 0, width, height);
-
-      // Convert to JPEG with compression for mobile
-      canvas.toBlob(
-        (blob) => {
-          if (blob) {
-            resolve(blob);
-          } else {
-            reject(new Error("Image compression failed"));
-          }
-        },
-        "image/jpeg",
-        MOBILE_QUALITY,
-      );
-    };
-
-    img.onerror = () => {
-      reject(new Error("Failed to load image"));
-    };
-
-    // Load image from file
-    img.src = URL.createObjectURL(file);
-  });
-}
-
 async function convertToWebP(file: File): Promise<Blob> {
   // Create a canvas to draw and convert the image
   const img = new Image();
@@ -169,33 +111,21 @@ export function useImageUpload() {
       setIsUploading(true);
       setProgress(0);
 
-      // Process file for mobile if needed
-      let processedFile: File | Blob = file;
-
-      if (isMobile() && file.size > 1024 * 1024) {
-        // 1MB threshold for mobile processing
-        console.log("Processing image for mobile upload...");
-        processedFile = await resizeImageForMobile(file);
-        console.log(
-          `Original size: ${(file.size / 1024 / 1024).toFixed(2)}MB, Processed size: ${(processedFile.size / 1024 / 1024).toFixed(2)}MB`,
-        );
-      }
-
       // Generate a unique filename using timestamp
       const timestamp = Date.now();
       const filename = `photo-${timestamp}${getFileExtension(file.name)}`;
 
       const storageRef = ref(storage, `events/${eventId}/uploads/${filename}`);
 
-      // Add timeout and retry logic for mobile
-      const uploadTask = uploadBytesResumable(storageRef, processedFile, {
+      // Add timeout for uploads
+      const uploadTask = uploadBytesResumable(storageRef, file, {
         customMetadata: {
           uploaderId: uploaderId ?? "",
         },
       });
 
       return new Promise<void>((resolve, reject) => {
-        // Set a timeout for mobile uploads
+        // Set a timeout for uploads
         const timeoutId = setTimeout(
           () => {
             uploadTask.cancel();
