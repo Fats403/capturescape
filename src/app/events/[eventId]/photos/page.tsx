@@ -1072,8 +1072,8 @@ export default function EventPhotosPage() {
             error instanceof Error ? error : new Error(errorMessage),
             {
               eventId,
-              fileName: uploadFile?.file.name || "unknown",
-              fileSize: uploadFile?.file.size || 0,
+              fileName: uploadFile?.file.name ?? "unknown",
+              fileSize: uploadFile?.file.size ?? 0,
               stage: "upload",
               isMobile: isMobile(),
               userAgent: navigator.userAgent,
@@ -1108,7 +1108,7 @@ export default function EventPhotosPage() {
       // Show results
       if (successCount > 0) {
         setUploadComplete(true);
-        clearUploadState(); // Clear saved state on successful upload
+        void clearUploadState(eventId);
 
         logUploadStep(
           "UPLOAD_SUCCESS",
