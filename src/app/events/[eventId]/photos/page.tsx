@@ -148,7 +148,11 @@ function trackUploadError(
 }
 
 // Enhanced logging function
-function logUploadStep(step: string, data: any, eventId: string) {
+function logUploadStep(
+  step: string,
+  data: Record<string, unknown>,
+  eventId: string,
+) {
   const logData = {
     step,
     timestamp: new Date().toISOString(),
@@ -174,6 +178,8 @@ function logUploadStep(step: string, data: any, eventId: string) {
     level: "info",
     tags: {
       upload_step: step,
+      is_mobile: isMobile(),
+      event_id: eventId,
     },
     extra: logData,
   });
@@ -205,7 +211,8 @@ function initDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
 
-    request.onerror = () => reject(request.error);
+    request.onerror = () =>
+      reject(new Error(request.error?.message ?? "IndexedDB open failed"));
     request.onsuccess = () => resolve(request.result);
 
     request.onupgradeneeded = (event) => {
@@ -250,7 +257,8 @@ async function saveUploadState(
     await new Promise<void>((resolve, reject) => {
       const request = store.put(state);
       request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
+      request.onerror = () =>
+        reject(new Error(request.error?.message ?? "IndexedDB put failed"));
     });
 
     logUploadStep(
@@ -291,8 +299,12 @@ async function loadUploadState(eventId: string): Promise<UploadFile[] | null> {
     const state = await new Promise<StoredUploadState | null>(
       (resolve, reject) => {
         const request = store.get(eventId);
-        request.onsuccess = () => resolve(request.result || null);
-        request.onerror = () => reject(request.error);
+        request.onsuccess = () => {
+          const result = request.result as StoredUploadState | undefined;
+          resolve(result ?? null);
+        };
+        request.onerror = () =>
+          reject(new Error(request.error?.message ?? "IndexedDB get failed"));
       },
     );
 
@@ -362,13 +374,17 @@ async function clearUploadState(eventId?: string): Promise<void> {
       await new Promise<void>((resolve, reject) => {
         const request = store.delete(eventId);
         request.onsuccess = () => resolve();
-        request.onerror = () => reject(request.error);
+        request.onerror = () =>
+          reject(
+            new Error(request.error?.message ?? "IndexedDB delete failed"),
+          );
       });
     } else {
       await new Promise<void>((resolve, reject) => {
         const request = store.clear();
         request.onsuccess = () => resolve();
-        request.onerror = () => reject(request.error);
+        request.onerror = () =>
+          reject(new Error(request.error?.message ?? "IndexedDB clear failed"));
       });
     }
   } catch (error) {
@@ -818,7 +834,7 @@ export default function EventPhotosPage() {
         });
       }
     },
-    [eventId, uploadFiles],
+    [eventId, uploadFiles, toast],
   );
 
   // Remove a file from upload queue
@@ -1294,7 +1310,7 @@ export default function EventPhotosPage() {
   };
 
   // Very simple navigation functions
-  const goNext = () => {
+  const goNext = useCallback(() => {
     if (!photos || !currentPhoto) return;
 
     const currentIndex = photos.findIndex((p) => p.id === currentPhoto.id);
@@ -1307,9 +1323,9 @@ export default function EventPhotosPage() {
     setDirection("left");
     setCurrentPhoto(nextPhoto!);
     openPhoto(nextPhoto!);
-  };
+  }, [photos, currentPhoto, openPhoto]);
 
-  const goPrev = () => {
+  const goPrev = useCallback(() => {
     if (!photos || !currentPhoto) return;
 
     const currentIndex = photos.findIndex((p) => p.id === currentPhoto.id);
@@ -1322,8 +1338,7 @@ export default function EventPhotosPage() {
     setDirection("right");
     setCurrentPhoto(prevPhoto!);
     openPhoto(prevPhoto!);
-  };
-
+  }, [photos, currentPhoto, openPhoto]);
   // Update swipe handlers
   const swipeHandlers = useSwipeable({
     onSwipedLeft: goNext,
@@ -1332,7 +1347,6 @@ export default function EventPhotosPage() {
     trackMouse: false,
     delta: 10,
   });
-
   // Update keyboard navigation
   useEffect(() => {
     if (!currentPhoto) return;
@@ -1349,7 +1363,7 @@ export default function EventPhotosPage() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [currentPhoto, closePhoto]);
+  }, [currentPhoto, goNext, goPrev, closePhoto]);
 
   // Add this state in your component
   const [showLoginDialog, setShowLoginDialog] = useState(false);
@@ -1377,8 +1391,8 @@ export default function EventPhotosPage() {
     setUploadComplete(false);
     setCurrentUploadIndex(-1);
     setIsRegeneratingArchive(false);
-    clearUploadState(); // Clear saved state when closing
-  }, []);
+    void clearUploadState(eventId);
+  }, [eventId]);
 
   if (isEventLoading || isPhotosLoading) {
     return (
@@ -1529,10 +1543,10 @@ export default function EventPhotosPage() {
               </Button>
             </div>
 
-            {photo?.likes?.count > 0 && (
+            {(photo?.likes?.count ?? 0) > 0 && (
               <div className="absolute bottom-2 left-2 z-10 flex items-center gap-1 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100">
                 <Heart className="h-3 w-3 fill-white" />
-                <span>{photo.likes.count}</span>
+                <span>{photo.likes?.count ?? 0}</span>
               </div>
             )}
           </div>
