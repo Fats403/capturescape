@@ -39,6 +39,7 @@ import { useSwipeable } from "react-swipeable";
 import { motion } from "framer-motion";
 import { useGoogleAuth } from "@/hooks/use-google-auth";
 import { GoogleButton } from "@/components/auth/google-button";
+import * as Sentry from "@sentry/nextjs";
 
 // Mobile-specific optimizations
 const MOBILE_MAX_DIMENSION = 1920; // Max width/height for mobile
@@ -106,6 +107,273 @@ interface UploadFile {
   status: "processing" | "pending" | "uploading" | "success" | "error";
   error?: string;
   processedFile?: File | Blob;
+}
+
+// Keep only the error tracking function (simplified)
+function trackUploadError(
+  error: Error,
+  context: {
+    eventId: string;
+    fileName?: string;
+    fileSize?: number;
+    stage:
+      | "file_selection"
+      | "processing"
+      | "upload"
+      | "localStorage"
+      | "component_remount";
+    isMobile: boolean;
+    userAgent: string;
+  },
+) {
+  // Capture the error with rich context
+  Sentry.withScope((scope) => {
+    scope.setTag("upload_stage", context.stage);
+    scope.setTag("is_mobile", context.isMobile);
+    scope.setContext("upload_details", {
+      eventId: context.eventId,
+      fileName: context.fileName,
+      fileSize: context.fileSize,
+      userAgent: context.userAgent,
+    });
+
+    // Add fingerprinting for similar errors
+    scope.setFingerprint(["upload-error", context.stage, error.name]);
+
+    Sentry.captureException(error);
+  });
+
+  // Also log to console for immediate debugging
+  console.error(`Upload error at ${context.stage}:`, error, context);
+}
+
+// Enhanced logging function
+function logUploadStep(step: string, data: any, eventId: string) {
+  const logData = {
+    step,
+    timestamp: new Date().toISOString(),
+    eventId,
+    isMobile: isMobile(),
+    userAgent: navigator.userAgent,
+    ...data,
+  };
+
+  // Log to console for immediate visibility
+  console.log(`[UPLOAD_${step}]`, logData);
+
+  // Send to Sentry as breadcrumb for context
+  Sentry.addBreadcrumb({
+    message: `Upload Step: ${step}`,
+    category: "upload",
+    level: "info",
+    data: logData,
+  });
+
+  // Also capture as a message for Sentry dashboard visibility
+  Sentry.captureMessage(`Upload Step: ${step}`, {
+    level: "info",
+    tags: {
+      upload_step: step,
+    },
+    extra: logData,
+  });
+}
+
+// Replace the localStorage functions with IndexedDB approach
+const DB_NAME = "capturescape_uploads";
+const DB_VERSION = 1;
+const STORE_NAME = "upload_states";
+const STORAGE_EXPIRY = 60 * 60 * 1000; // 1 hour
+
+interface StoredUploadState {
+  eventId: string;
+  files: Array<{
+    id: string;
+    name: string;
+    type: string;
+    size: number;
+    status: UploadFile["status"];
+    error?: string;
+    originalFile: Blob;
+    processedFile?: Blob;
+  }>;
+  timestamp: number;
+}
+
+// Initialize IndexedDB
+function initDB(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, DB_VERSION);
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(request.result);
+
+    request.onupgradeneeded = (event) => {
+      const db = (event.target as IDBOpenDBRequest).result;
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME, { keyPath: "eventId" });
+      }
+    };
+  });
+}
+
+// Save upload state to IndexedDB
+async function saveUploadState(
+  eventId: string,
+  files: UploadFile[],
+): Promise<void> {
+  logUploadStep("INDEXEDDB_SAVE_START", { fileCount: files.length }, eventId);
+
+  try {
+    const db = await initDB();
+
+    const storedFiles = files.map((file) => ({
+      id: file.id,
+      name: file.file.name,
+      type: file.file.type,
+      size: file.file.size,
+      status: file.status,
+      error: file.error,
+      originalFile: file.file,
+      processedFile: file.processedFile,
+    }));
+
+    const state: StoredUploadState = {
+      eventId,
+      files: storedFiles,
+      timestamp: Date.now(),
+    };
+
+    const transaction = db.transaction([STORE_NAME], "readwrite");
+    const store = transaction.objectStore(STORE_NAME);
+
+    await new Promise<void>((resolve, reject) => {
+      const request = store.put(state);
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+
+    logUploadStep(
+      "INDEXEDDB_SAVE_SUCCESS",
+      {
+        storedFileCount: storedFiles.length,
+      },
+      eventId,
+    );
+  } catch (error) {
+    logUploadStep(
+      "INDEXEDDB_SAVE_ERROR",
+      {
+        error: error instanceof Error ? error.message : "Unknown error",
+      },
+      eventId,
+    );
+
+    trackUploadError(
+      error instanceof Error ? error : new Error("IndexedDB save failed"),
+      {
+        eventId,
+        stage: "localStorage",
+        isMobile: isMobile(),
+        userAgent: navigator.userAgent,
+      },
+    );
+  }
+}
+
+// Load upload state from IndexedDB
+async function loadUploadState(eventId: string): Promise<UploadFile[] | null> {
+  try {
+    const db = await initDB();
+    const transaction = db.transaction([STORE_NAME], "readonly");
+    const store = transaction.objectStore(STORE_NAME);
+
+    const state = await new Promise<StoredUploadState | null>(
+      (resolve, reject) => {
+        const request = store.get(eventId);
+        request.onsuccess = () => resolve(request.result || null);
+        request.onerror = () => reject(request.error);
+      },
+    );
+
+    if (!state) return null;
+
+    // Check if data is fresh
+    if (Date.now() - state.timestamp > STORAGE_EXPIRY) {
+      await clearUploadState(eventId);
+      return null;
+    }
+
+    const uploadFiles: UploadFile[] = [];
+
+    for (const storedFile of state.files) {
+      try {
+        uploadFiles.push({
+          file: new File([storedFile.originalFile], storedFile.name, {
+            type: storedFile.type,
+          }),
+          id: storedFile.id,
+          preview: URL.createObjectURL(storedFile.originalFile), // Create fresh preview URL
+          status: storedFile.status,
+          error: storedFile.error,
+          processedFile: storedFile.processedFile,
+        });
+      } catch (fileError) {
+        trackUploadError(
+          fileError instanceof Error
+            ? fileError
+            : new Error("File restoration error"),
+          {
+            eventId,
+            fileName: storedFile.name,
+            fileSize: storedFile.size,
+            stage: "localStorage",
+            isMobile: isMobile(),
+            userAgent: navigator.userAgent,
+          },
+        );
+      }
+    }
+
+    return uploadFiles;
+  } catch (error) {
+    trackUploadError(
+      error instanceof Error ? error : new Error("IndexedDB load failed"),
+      {
+        eventId,
+        stage: "localStorage",
+        isMobile: isMobile(),
+        userAgent: navigator.userAgent,
+      },
+    );
+    await clearUploadState(eventId);
+    return null;
+  }
+}
+
+// Clear upload state from IndexedDB
+async function clearUploadState(eventId?: string): Promise<void> {
+  try {
+    const db = await initDB();
+    const transaction = db.transaction([STORE_NAME], "readwrite");
+    const store = transaction.objectStore(STORE_NAME);
+
+    if (eventId) {
+      await new Promise<void>((resolve, reject) => {
+        const request = store.delete(eventId);
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error);
+      });
+    } else {
+      await new Promise<void>((resolve, reject) => {
+        const request = store.clear();
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error);
+      });
+    }
+  } catch (error) {
+    console.error("Failed to clear IndexedDB:", error);
+  }
 }
 
 export default function EventPhotosPage() {
@@ -268,64 +536,289 @@ export default function EventPhotosPage() {
     });
   };
 
-  // Handle file selection with actual processing
+  // Simplified load saved upload state on mount
+  useEffect(() => {
+    if (!eventId) return;
+
+    const loadSavedState = async () => {
+      try {
+        const savedFiles = await loadUploadState(eventId);
+        if (savedFiles && savedFiles.length > 0) {
+          setUploadFiles(savedFiles);
+          setShowUploadDialog(true);
+
+          // Track component remount recovery
+          trackUploadError(
+            new Error("Component remounted - upload state restored"),
+            {
+              eventId,
+              stage: "component_remount",
+              isMobile: isMobile(),
+              userAgent: navigator.userAgent,
+            },
+          );
+
+          toast({
+            title: "Upload restored",
+            description: `Restored ${savedFiles.length} photos from previous session`,
+            variant: "default",
+          });
+        }
+      } catch (error) {
+        trackUploadError(
+          error instanceof Error
+            ? error
+            : new Error("State restoration failed"),
+          {
+            eventId,
+            stage: "localStorage",
+            isMobile: isMobile(),
+            userAgent: navigator.userAgent,
+          },
+        );
+      }
+    };
+
+    void loadSavedState();
+  }, [eventId, toast]);
+
+  // Enhanced file selection with detailed logging
   const handleFileSelect = useCallback(
     async (event: React.ChangeEvent<HTMLInputElement>) => {
       const files = Array.from(event.target.files ?? []);
 
-      const newUploadFiles: UploadFile[] = files.map((file, index) => ({
-        file,
-        id: `${Date.now()}-${index}`,
-        preview: URL.createObjectURL(file),
-        status: "processing", // Start with processing status
-      }));
+      logUploadStep(
+        "FILE_SELECTION_START",
+        {
+          fileCount: files.length,
+          fileSizes: files.map((f) => f.size),
+          fileNames: files.map((f) => f.name),
+          fileTypes: files.map((f) => f.type),
+        },
+        eventId,
+      );
 
-      setUploadFiles((prev) => [...prev, ...newUploadFiles]);
-      setUploadComplete(false);
-
-      // Clear the input so same files can be selected again
-      if (event.target) {
-        event.target.value = "";
-      }
-
-      // Process files asynchronously
-      for (const uploadFile of newUploadFiles) {
-        try {
-          let processedFile: File | Blob = uploadFile.file;
-
-          if (isMobile() && uploadFile.file.size > 1024 * 1024) {
-            processedFile = await resizeImageForMobile(uploadFile.file);
-          }
-
-          // Update file status to ready
-          setUploadFiles((prev) =>
-            prev.map((f) =>
-              f.id === uploadFile.id
-                ? { ...f, status: "pending", processedFile }
-                : f,
-            ),
+      try {
+        const newUploadFiles: UploadFile[] = files.map((file, index) => {
+          const preview = URL.createObjectURL(file);
+          logUploadStep(
+            "PREVIEW_URL_CREATED",
+            {
+              fileIndex: index,
+              fileName: file.name,
+              previewUrl: preview,
+              fileSize: file.size,
+            },
+            eventId,
           );
-        } catch (error) {
-          console.error(`Failed to process ${uploadFile.file.name}:`, error);
-          // Mark as error if processing fails
-          setUploadFiles((prev) =>
-            prev.map((f) =>
-              f.id === uploadFile.id
-                ? {
-                    ...f,
-                    status: "error",
-                    error:
-                      error instanceof Error
-                        ? error.message
-                        : "Failed to process image",
-                  }
-                : f,
-            ),
+
+          return {
+            file,
+            id: `${Date.now()}-${index}`,
+            preview,
+            status: "processing" as const,
+          };
+        });
+
+        logUploadStep(
+          "UPLOAD_FILES_CREATED",
+          {
+            uploadFileIds: newUploadFiles.map((f) => f.id),
+            uploadFileStatuses: newUploadFiles.map((f) => f.status),
+          },
+          eventId,
+        );
+
+        setUploadFiles((prev) => {
+          const newState = [...prev, ...newUploadFiles];
+          logUploadStep(
+            "UPLOAD_FILES_STATE_UPDATED",
+            {
+              previousCount: prev.length,
+              newCount: newState.length,
+              totalFiles: newState.length,
+            },
+            eventId,
           );
+          return newState;
+        });
+
+        setUploadComplete(false);
+
+        // Clear the input so same files can be selected again
+        if (event.target) {
+          event.target.value = "";
         }
+
+        logUploadStep(
+          "PROCESSING_START",
+          {
+            filesToProcess: newUploadFiles.length,
+          },
+          eventId,
+        );
+
+        // Process files asynchronously with detailed logging
+        for (let i = 0; i < newUploadFiles.length; i++) {
+          const uploadFile = newUploadFiles[i];
+
+          logUploadStep(
+            "PROCESSING_FILE_START",
+            {
+              fileIndex: i,
+              fileName: uploadFile?.file.name,
+              fileSize: uploadFile?.file.size,
+              fileId: uploadFile?.id,
+            },
+            eventId,
+          );
+
+          try {
+            let processedFile: File | Blob | undefined = uploadFile?.file;
+
+            if (
+              isMobile() &&
+              uploadFile?.file?.size &&
+              uploadFile.file.size > 1024 * 1024
+            ) {
+              logUploadStep(
+                "MOBILE_RESIZE_START",
+                {
+                  fileName: uploadFile?.file.name,
+                  originalSize: uploadFile?.file.size,
+                  maxDimension: MOBILE_MAX_DIMENSION,
+                  quality: MOBILE_QUALITY,
+                },
+                eventId,
+              );
+
+              processedFile = await resizeImageForMobile(uploadFile.file);
+
+              logUploadStep(
+                "MOBILE_RESIZE_COMPLETE",
+                {
+                  fileName: uploadFile.file.name,
+                  originalSize: uploadFile.file.size,
+                  processedSize: processedFile.size,
+                  processedType: processedFile.type,
+                },
+                eventId,
+              );
+            } else {
+              logUploadStep(
+                "MOBILE_RESIZE_SKIPPED",
+                {
+                  fileName: uploadFile?.file.name,
+                  reason: !isMobile() ? "not_mobile" : "file_too_small",
+                  fileSize: uploadFile?.file.size,
+                },
+                eventId,
+              );
+            }
+
+            // Update file status to ready
+            setUploadFiles((prev) => {
+              const updated = prev.map((f) =>
+                f.id === uploadFile?.id
+                  ? { ...f, status: "pending" as const, processedFile }
+                  : f,
+              );
+
+              logUploadStep(
+                "FILE_STATUS_UPDATED",
+                {
+                  fileId: uploadFile?.id,
+                  fileName: uploadFile?.file.name,
+                  newStatus: "pending",
+                  hasProcessedFile: !!processedFile,
+                },
+                eventId,
+              );
+
+              return updated;
+            });
+          } catch (error) {
+            const errorObj =
+              error instanceof Error
+                ? error
+                : new Error("Failed to process image");
+
+            logUploadStep(
+              "PROCESSING_ERROR",
+              {
+                fileName: uploadFile?.file.name,
+                fileId: uploadFile?.id,
+                error: errorObj.message,
+                errorStack: errorObj.stack,
+              },
+              eventId,
+            );
+
+            trackUploadError(errorObj, {
+              eventId,
+              fileName: uploadFile?.file.name,
+              fileSize: uploadFile?.file.size,
+              stage: "processing",
+              isMobile: isMobile(),
+              userAgent: navigator.userAgent,
+            });
+
+            // Mark as error if processing fails
+            setUploadFiles((prev) =>
+              prev.map((f) =>
+                f.id === uploadFile?.id
+                  ? {
+                      ...f,
+                      status: "error" as const,
+                      error: errorObj.message,
+                    }
+                  : f,
+              ),
+            );
+          }
+        }
+
+        logUploadStep(
+          "PROCESSING_COMPLETE",
+          {
+            totalFiles: newUploadFiles.length,
+          },
+          eventId,
+        );
+
+        // Save state after processing
+        setTimeout(() => {
+          logUploadStep("INDEXEDDB_SAVE_START", {}, eventId);
+          void saveUploadState(eventId, uploadFiles);
+        }, 2000);
+      } catch (error) {
+        logUploadStep(
+          "FILE_SELECTION_ERROR",
+          {
+            error: error instanceof Error ? error.message : "Unknown error",
+            errorStack: error instanceof Error ? error.stack : undefined,
+          },
+          eventId,
+        );
+
+        trackUploadError(
+          error instanceof Error ? error : new Error("File selection failed"),
+          {
+            eventId,
+            stage: "file_selection",
+            isMobile: isMobile(),
+            userAgent: navigator.userAgent,
+          },
+        );
+
+        toast({
+          title: "Upload failed",
+          description: "Failed to process selected files. Please try again.",
+          variant: "destructive",
+        });
       }
     },
-    [],
+    [eventId, uploadFiles],
   );
 
   // Remove a file from upload queue
@@ -341,13 +834,46 @@ export default function EventPhotosPage() {
     });
   }, []);
 
-  // Update the upload function to use processed files
+  // Enhanced upload function with detailed logging (FIXED)
   const handleUploadAll = async () => {
-    if (uploadFiles.length === 0 || !user?.uid) return;
+    logUploadStep(
+      "UPLOAD_ALL_START",
+      {
+        totalFiles: uploadFiles.length,
+        fileStatuses: uploadFiles.map((f) => ({ id: f.id, status: f.status })),
+        userId: user?.uid,
+      },
+      eventId,
+    );
+
+    if (uploadFiles.length === 0 || !user?.uid) {
+      logUploadStep(
+        "UPLOAD_ALL_ABORTED",
+        {
+          reason: uploadFiles.length === 0 ? "no_files" : "no_user",
+          fileCount: uploadFiles.length,
+          hasUser: !!user?.uid,
+        },
+        eventId,
+      );
+      return;
+    }
 
     // Check if all files are ready
     const notReadyFiles = uploadFiles.filter((f) => f.status === "processing");
     if (notReadyFiles.length > 0) {
+      logUploadStep(
+        "UPLOAD_ALL_WAITING",
+        {
+          notReadyCount: notReadyFiles.length,
+          notReadyFiles: notReadyFiles.map((f) => ({
+            id: f.id,
+            status: f.status,
+          })),
+        },
+        eventId,
+      );
+
       toast({
         title: "Please wait",
         description:
@@ -361,18 +887,54 @@ export default function EventPhotosPage() {
     let successCount = 0;
     let failureCount = 0;
 
+    logUploadStep(
+      "UPLOAD_LOOP_START",
+      {
+        filesToUpload: uploadFiles.length,
+      },
+      eventId,
+    );
+
     try {
       // Upload files one by one to show individual progress
       for (let i = 0; i < uploadFiles.length; i++) {
         const uploadFile = uploadFiles[i];
 
+        logUploadStep(
+          "UPLOAD_FILE_START",
+          {
+            fileIndex: i,
+            fileName: uploadFile?.file.name,
+            fileId: uploadFile?.id,
+            currentStatus: uploadFile?.status,
+          },
+          eventId,
+        );
+
         if (uploadFile?.status === "success") {
           successCount++;
+          logUploadStep(
+            "UPLOAD_FILE_ALREADY_SUCCESS",
+            {
+              fileIndex: i,
+              fileName: uploadFile.file.name,
+            },
+            eventId,
+          );
           continue;
         }
 
         if (uploadFile?.status === "error") {
           failureCount++;
+          logUploadStep(
+            "UPLOAD_FILE_ALREADY_ERROR",
+            {
+              fileIndex: i,
+              fileName: uploadFile.file.name,
+              existingError: uploadFile.error,
+            },
+            eventId,
+          );
           continue;
         }
 
@@ -381,8 +943,17 @@ export default function EventPhotosPage() {
         // Update status to uploading
         setUploadFiles((prev) =>
           prev.map((f, index) =>
-            index === i ? { ...f, status: "uploading" } : f,
+            index === i ? { ...f, status: "uploading" as const } : f,
           ),
+        );
+
+        logUploadStep(
+          "UPLOAD_STATUS_SET_TO_UPLOADING",
+          {
+            fileIndex: i,
+            fileName: uploadFile?.file.name,
+          },
+          eventId,
         );
 
         try {
@@ -392,6 +963,17 @@ export default function EventPhotosPage() {
 
           // Use the processed file if available, otherwise use original
           const fileToUpload = uploadFile.processedFile ?? uploadFile.file;
+
+          logUploadStep(
+            "FILE_TO_UPLOAD_SELECTED",
+            {
+              fileName: uploadFile.file.name,
+              usingProcessedFile: !!uploadFile.processedFile,
+              fileSize: fileToUpload.size,
+              fileType: fileToUpload.type,
+            },
+            eventId,
+          );
 
           // Create a File object if we have a Blob
           const finalFile =
@@ -405,24 +987,89 @@ export default function EventPhotosPage() {
                   },
                 );
 
+          logUploadStep(
+            "FINAL_FILE_PREPARED",
+            {
+              fileName: finalFile.name,
+              fileSize: finalFile.size,
+              fileType: finalFile.type,
+              wasBlob: !(fileToUpload instanceof File),
+            },
+            eventId,
+          );
+
+          logUploadStep(
+            "CALLING_UPLOAD_EVENT_PHOTO",
+            {
+              fileName: finalFile.name,
+              eventId,
+              userId: user.uid,
+            },
+            eventId,
+          );
+
           await uploadEventPhoto(finalFile, eventId, user.uid);
+
+          logUploadStep(
+            "UPLOAD_EVENT_PHOTO_SUCCESS",
+            {
+              fileName: finalFile.name,
+            },
+            eventId,
+          );
 
           // Update status to success
           setUploadFiles((prev) =>
             prev.map((f, index) =>
-              index === i ? { ...f, status: "success" } : f,
+              index === i ? { ...f, status: "success" as const } : f,
             ),
           );
 
           successCount++;
+
+          logUploadStep(
+            "UPLOAD_FILE_COMPLETE",
+            {
+              fileIndex: i,
+              fileName: uploadFile.file.name,
+              successCount,
+            },
+            eventId,
+          );
         } catch (error) {
           const errorMessage =
             error instanceof Error ? error.message : "Upload failed";
 
+          logUploadStep(
+            "UPLOAD_FILE_ERROR",
+            {
+              fileIndex: i,
+              fileName: uploadFile?.file.name,
+              error: errorMessage,
+              errorStack: error instanceof Error ? error.stack : undefined,
+            },
+            eventId,
+          );
+
+          // Track upload errors with detailed context
+          trackUploadError(
+            error instanceof Error ? error : new Error(errorMessage),
+            {
+              eventId,
+              fileName: uploadFile?.file.name || "unknown",
+              fileSize: uploadFile?.file.size || 0,
+              stage: "upload",
+              isMobile: isMobile(),
+              userAgent: navigator.userAgent,
+            },
+          );
+
           // Update status to error
           setUploadFiles((prev) =>
             prev.map((f, index) =>
-              index === i ? { ...f, status: "error", error: errorMessage } : f,
+              index === i
+                ? { ...f, status: "error" as const, error: errorMessage }
+                : f,
             ),
           );
 
@@ -432,14 +1079,42 @@ export default function EventPhotosPage() {
 
       setCurrentUploadIndex(-1);
 
+      logUploadStep(
+        "UPLOAD_LOOP_COMPLETE",
+        {
+          successCount,
+          failureCount,
+          totalFiles: uploadFiles.length,
+        },
+        eventId,
+      );
+
       // Show results
       if (successCount > 0) {
         setUploadComplete(true);
+        clearUploadState(); // Clear saved state on successful upload
+
+        logUploadStep(
+          "UPLOAD_SUCCESS",
+          {
+            successCount,
+            failureCount,
+          },
+          eventId,
+        );
 
         // Automatically regenerate archive if event has ended
         if (event && new Date(event.endDate) <= new Date()) {
-          // Wait for image processing before triggering archive regeneration
           const delaySeconds = successCount * 5;
+
+          logUploadStep(
+            "ARCHIVE_REGENERATION_SCHEDULED",
+            {
+              delaySeconds,
+              eventEndDate: event.endDate,
+            },
+            eventId,
+          );
 
           setTimeout(() => {
             setIsRegeneratingArchive(true);
@@ -447,6 +1122,27 @@ export default function EventPhotosPage() {
           }, delaySeconds * 1000);
         }
       } else {
+        // Force an error for Sentry when all uploads fail
+        const allFailError = new Error(
+          `All ${uploadFiles.length} uploads failed on mobile`,
+        );
+
+        logUploadStep(
+          "ALL_UPLOADS_FAILED",
+          {
+            totalFiles: uploadFiles.length,
+            failureCount,
+          },
+          eventId,
+        );
+
+        trackUploadError(allFailError, {
+          eventId,
+          stage: "upload",
+          isMobile: isMobile(),
+          userAgent: navigator.userAgent,
+        });
+
         toast({
           title: "Upload failed",
           description: "No photos were uploaded successfully.",
@@ -454,6 +1150,25 @@ export default function EventPhotosPage() {
         });
       }
     } catch (error) {
+      logUploadStep(
+        "UPLOAD_PROCESS_ERROR",
+        {
+          error: error instanceof Error ? error.message : "Unknown error",
+          errorStack: error instanceof Error ? error.stack : undefined,
+        },
+        eventId,
+      );
+
+      trackUploadError(
+        error instanceof Error ? error : new Error("Upload process failed"),
+        {
+          eventId,
+          stage: "upload",
+          isMobile: isMobile(),
+          userAgent: navigator.userAgent,
+        },
+      );
+
       toast({
         title: "Upload error",
         description: "An unexpected error occurred during upload.",
@@ -461,6 +1176,14 @@ export default function EventPhotosPage() {
       });
     } finally {
       setIsUploading(false);
+      logUploadStep(
+        "UPLOAD_PROCESS_FINISHED",
+        {
+          finalSuccessCount: successCount,
+          finalFailureCount: failureCount,
+        },
+        eventId,
+      );
     }
   };
 
@@ -646,6 +1369,16 @@ export default function EventPhotosPage() {
       void utils.event.getById.invalidate({ id: eventId });
     }, [toast, eventId, utils]),
   });
+
+  // Update the upload dialog close handler to clear saved state
+  const handleCloseUploadDialog = useCallback(() => {
+    setShowUploadDialog(false);
+    setUploadFiles([]);
+    setUploadComplete(false);
+    setCurrentUploadIndex(-1);
+    setIsRegeneratingArchive(false);
+    clearUploadState(); // Clear saved state when closing
+  }, []);
 
   if (isEventLoading || isPhotosLoading) {
     return (
@@ -1061,13 +1794,7 @@ export default function EventPhotosPage() {
                 <div className="flex gap-2">
                   <Button
                     variant="outline"
-                    onClick={() => {
-                      setShowUploadDialog(false);
-                      setUploadFiles([]);
-                      setUploadComplete(false);
-                      setCurrentUploadIndex(-1);
-                      setIsRegeneratingArchive(false);
-                    }}
+                    onClick={handleCloseUploadDialog}
                     className="flex-1"
                   >
                     {uploadComplete || isRegeneratingArchive

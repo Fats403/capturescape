@@ -111,23 +111,41 @@ export function useImageUpload() {
       setIsUploading(true);
       setProgress(0);
 
+      // Validate file before upload
+      if (!file) {
+        throw new Error("No file provided");
+      }
+
+      // Check file size (allow up to 10MB for processed files)
+      const maxSize = 10 * 1024 * 1024; // 10MB
+      if (file.size > maxSize) {
+        throw new Error("File too large. Maximum size is 10MB.");
+      }
+
+      console.log(
+        `Starting upload: ${file.name}, Size: ${(file.size / 1024 / 1024).toFixed(2)}MB, Type: ${file.type}`,
+      );
+
       // Generate a unique filename using timestamp
       const timestamp = Date.now();
       const filename = `photo-${timestamp}${getFileExtension(file.name)}`;
 
       const storageRef = ref(storage, `events/${eventId}/uploads/${filename}`);
 
-      // Add timeout for uploads
+      // Create upload task with metadata
       const uploadTask = uploadBytesResumable(storageRef, file, {
         customMetadata: {
           uploaderId: uploaderId ?? "",
+          originalName: file.name,
+          processedAt: new Date().toISOString(),
         },
       });
 
       return new Promise<void>((resolve, reject) => {
-        // Set a timeout for uploads
+        // Shorter timeout for mobile (2 minutes)
         const timeoutId = setTimeout(
           () => {
+            console.log("Upload timeout reached");
             uploadTask.cancel();
             reject(
               new Error(
@@ -135,8 +153,8 @@ export function useImageUpload() {
               ),
             );
           },
-          5 * 60 * 1000,
-        ); // 5 minute timeout
+          2 * 60 * 1000, // 2 minute timeout for mobile
+        );
 
         uploadTask.on(
           "state_changed",
@@ -145,11 +163,14 @@ export function useImageUpload() {
               (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
             setProgress(progress);
 
-            // Log progress for debugging
-            if (progress === 0) {
-              console.log("Upload starting...");
-            } else if (progress > 0) {
-              console.log(`Upload progress: ${progress.toFixed(1)}%`);
+            // More detailed logging
+            console.log(
+              `Upload progress: ${progress.toFixed(1)}% (${snapshot.bytesTransferred}/${snapshot.totalBytes} bytes)`,
+            );
+
+            // Check if upload is actually progressing
+            if (progress > 0) {
+              console.log("Upload is progressing normally");
             }
           },
           (error) => {
@@ -157,7 +178,21 @@ export function useImageUpload() {
             setIsUploading(false);
             setProgress(0);
             console.error("Upload error:", error);
-            reject(error);
+
+            // Provide more specific error messages
+            let errorMessage = "Upload failed";
+            if (error.code === "storage/canceled") {
+              errorMessage = "Upload was cancelled";
+            } else if (error.code === "storage/unknown") {
+              errorMessage = "Network error - please check your connection";
+            } else if (error.code === "storage/quota-exceeded") {
+              errorMessage = "Storage quota exceeded";
+            } else if (error.code === "storage/unauthenticated") {
+              errorMessage =
+                "Authentication error - please refresh and try again";
+            }
+
+            reject(new Error(errorMessage));
           },
           () => {
             clearTimeout(timeoutId);
