@@ -142,19 +142,27 @@ export function useImageUpload() {
       });
 
       return new Promise<void>((resolve, reject) => {
-        // Shorter timeout for mobile (2 minutes)
-        const timeoutId = setTimeout(
-          () => {
-            console.log("Upload timeout reached");
-            uploadTask.cancel();
-            reject(
-              new Error(
-                "Upload timeout - please check your connection and try again",
-              ),
-            );
-          },
-          2 * 60 * 1000, // 2 minute timeout for mobile
-        );
+        // FIXED: Longer timeout for mobile with progressive timeout
+        const isMobile =
+          /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+            navigator.userAgent,
+          );
+
+        // 5 minutes for mobile, 3 minutes for desktop
+        const timeoutDuration = isMobile ? 5 * 60 * 1000 : 3 * 60 * 1000;
+
+        let lastProgressTime = Date.now();
+        let lastBytesTransferred = 0;
+
+        const timeoutId = setTimeout(() => {
+          console.log("Upload timeout reached");
+          uploadTask.cancel();
+          reject(
+            new Error(
+              "Upload timeout - please check your connection and try again",
+            ),
+          );
+        }, timeoutDuration);
 
         uploadTask.on(
           "state_changed",
@@ -163,14 +171,23 @@ export function useImageUpload() {
               (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
             setProgress(progress);
 
-            // More detailed logging
-            console.log(
-              `Upload progress: ${progress.toFixed(1)}% (${snapshot.bytesTransferred}/${snapshot.totalBytes} bytes)`,
-            );
+            // FIXED: Progressive timeout - reset timeout if upload is making progress
+            const now = Date.now();
+            const bytesProgress =
+              snapshot.bytesTransferred - lastBytesTransferred;
 
-            // Check if upload is actually progressing
-            if (progress > 0) {
-              console.log("Upload is progressing normally");
+            if (bytesProgress > 0) {
+              lastProgressTime = now;
+              lastBytesTransferred = snapshot.bytesTransferred;
+            }
+
+            // Only log progress every 10%
+            if (
+              Math.floor(progress) % 10 === 0 &&
+              Math.floor(progress) !==
+                Math.floor((lastBytesTransferred / snapshot.totalBytes) * 100)
+            ) {
+              console.log(`Upload progress: ${progress.toFixed(1)}%`);
             }
           },
           (error) => {
@@ -182,14 +199,18 @@ export function useImageUpload() {
             // Provide more specific error messages
             let errorMessage = "Upload failed";
             if (error.code === "storage/canceled") {
-              errorMessage = "Upload was cancelled";
+              errorMessage =
+                "Upload was cancelled - this may be due to poor connection";
             } else if (error.code === "storage/unknown") {
-              errorMessage = "Network error - please check your connection";
+              errorMessage =
+                "Network error - please check your connection and try again";
             } else if (error.code === "storage/quota-exceeded") {
               errorMessage = "Storage quota exceeded";
             } else if (error.code === "storage/unauthenticated") {
               errorMessage =
                 "Authentication error - please refresh and try again";
+            } else if (error.code === "storage/retry-limit-exceeded") {
+              errorMessage = "Too many retries - please try again later";
             }
 
             reject(new Error(errorMessage));
@@ -198,7 +219,6 @@ export function useImageUpload() {
             clearTimeout(timeoutId);
             setIsUploading(false);
             setProgress(0);
-            console.log("Upload completed successfully");
             resolve();
           },
         );
