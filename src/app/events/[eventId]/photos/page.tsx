@@ -635,9 +635,7 @@ export default function EventPhotosPage() {
         // Process files asynchronously
         const processedFiles: UploadFile[] = [];
 
-        for (let i = 0; i < newUploadFiles.length; i++) {
-          const uploadFile = newUploadFiles[i];
-
+        for (const uploadFile of newUploadFiles) {
           if (!uploadFile) continue;
 
           try {
@@ -706,7 +704,7 @@ export default function EventPhotosPage() {
             const processed = processedFiles.find(
               (pf) => pf.id === existingFile.id,
             );
-            return processed || existingFile;
+            return processed ?? existingFile;
           });
 
           logUploadStep(
